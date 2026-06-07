@@ -208,6 +208,9 @@ export const orders = pgTable("orders", {
     .notNull(),
   status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, preparing, completed, cancelled
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  tokenNumber: varchar("token_number", { length: 50 }),
+  pointsRedeemed: integer("points_redeemed").default(0).notNull(),
+  discount: decimal("discount", { precision: 10, scale: 2 }).default("0.00").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

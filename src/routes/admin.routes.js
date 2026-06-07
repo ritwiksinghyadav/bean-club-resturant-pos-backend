@@ -217,4 +217,23 @@ router.delete(
   adminController.removeVariant
 );
 
+// --- Order Routes ---
+router.get(
+  "/orders",
+  protectAdmin,
+  adminController.getOrders
+);
+
+router.get(
+  "/orders/:id",
+  protectAdmin,
+  adminController.getOrder
+);
+
+router.put(
+  "/orders/:id/status",
+  protectAdmin,
+  adminController.changeOrderStatus
+);
+
 export default router;

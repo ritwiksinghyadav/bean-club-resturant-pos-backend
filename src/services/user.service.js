@@ -109,7 +109,7 @@ export const getCustomerMenu = async () => {
   return activeCategories;
 };
 
-export const placeCustomerOrder = async (userId, items) => {
+export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
   if (!items || items.length === 0) {
     throw new BadRequestError("Order must contain at least one item");
   }
@@ -155,17 +155,47 @@ export const placeCustomerOrder = async (userId, items) => {
       });
     }
 
-    // 3. Create the order
+    // 3. Process loyalty points redemption
+    let discount = 0;
+    let pointsToDeduct = 0;
+    if (pointsRedeemed > 0) {
+      // Fetch user's current loyalty points balance
+      const ledger = await tx
+        .select()
+        .from(loyaltyLedger)
+        .where(eq(loyaltyLedger.userId, userId));
+      const currentPoints = ledger.reduce((sum, entry) => sum + entry.points, 0);
+
+      if (pointsRedeemed > currentPoints) {
+        throw new BadRequestError(`Insufficient loyalty points. Available: ${currentPoints}, requested: ${pointsRedeemed}`);
+      }
+
+      // Max points to redeem cannot exceed the cost of the order (or order cost * 10)
+      pointsToDeduct = Math.min(pointsRedeemed, Math.floor(totalAmount * 10));
+      discount = pointsToDeduct * 0.10;
+    }
+
+    const netAmount = Math.max(0, totalAmount - discount);
+    const tax = netAmount * 0.05; // 5% GST/Tax
+    const finalAmount = netAmount + tax;
+    
+    // Generate a random 4-digit token number
+    const tokenNumber = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // 4. Create the order
     const [newOrder] = await tx
       .insert(orders)
       .values({
         userId,
         status: "pending",
-        totalAmount: totalAmount.toFixed(2),
+        totalAmount: finalAmount.toFixed(2),
+        tokenNumber,
+        pointsRedeemed: pointsToDeduct,
+        discount: discount.toFixed(2),
       })
       .returning();
 
-    // 4. Create the order items
+    // 5. Create the order items
     for (const orderItem of orderItemsToInsert) {
       await tx.insert(orderItems).values({
         orderId: newOrder.id,
@@ -173,19 +203,24 @@ export const placeCustomerOrder = async (userId, items) => {
       });
     }
 
-    // 5. Calculate loyalty points (1 point per $1 spent, rounded down)
-    const pointsEarned = Math.floor(totalAmount);
-    if (pointsEarned > 0) {
+    // 6. Deduct loyalty points if redeemed
+    if (pointsToDeduct > 0) {
       await tx.insert(loyaltyLedger).values({
         userId,
-        points: pointsEarned,
-        description: `Points earned on Order #${newOrder.id.slice(0, 8)}`,
+        points: -pointsToDeduct,
+        description: `Redeemed points on Order #${tokenNumber}`,
       });
     }
 
+    // 7. Loyalty points are awarded when the order is APPROVED (not on placement)
+    // See: admin.service.js updateOrderStatus
+
     return {
       order: newOrder,
-      pointsEarned,
+      discount,
+      tax,
+      originalAmount: totalAmount,
+      pointsEarned: 0, // will be credited on approval
     };
   });
 };

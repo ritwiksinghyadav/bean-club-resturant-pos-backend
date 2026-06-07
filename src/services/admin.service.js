@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { admins, categories, menuItems, itemVariants, tags, menuItemTags, variants, roles } from "../db/schema.js";
+import { admins, categories, menuItems, itemVariants, tags, menuItemTags, variants, roles, orders, loyaltyLedger } from "../db/schema.js";
 import { eq, and, ne, isNull, or, ilike, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -1016,5 +1016,190 @@ export const deleteAdmin = async (id, requesterId) => {
 
   await db.delete(admins).where(eq(admins.id, id));
   return { id };
+};
+
+export const getAdminOrders = async (query = {}) => {
+  const { page, perPage, status } = query;
+  
+  const whereClauses = [];
+  if (status && status !== 'all') {
+    whereClauses.push(eq(orders.status, status));
+  }
+  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+
+  // Calculate total count for the filtered results
+  const countRes = await db
+    .select({ count: sql`count(*)` })
+    .from(orders)
+    .where(where);
+  const totalItems = parseInt(countRes[0]?.count || 0, 10);
+
+  // Calculate stats for all statuses
+  const statsRes = await db
+    .select({
+      status: orders.status,
+      count: sql`count(*)`,
+    })
+    .from(orders)
+    .groupBy(orders.status);
+
+  const stats = {
+    pending: 0,
+    approved: 0,
+    preparing: 0,
+    completed: 0,
+    cancelled: 0,
+  };
+  
+  let allCount = 0;
+  statsRes.forEach(row => {
+    const val = parseInt(row.count, 10);
+    if (stats[row.status] !== undefined) {
+      stats[row.status] = val;
+    }
+    allCount += val;
+  });
+  stats.all = allCount;
+
+  let limit = undefined;
+  let offset = undefined;
+  if (page && perPage) {
+    limit = parseInt(perPage, 10);
+    offset = (parseInt(page, 10) - 1) * limit;
+  }
+
+  const results = await db.query.orders.findMany({
+    where,
+    limit,
+    offset,
+    orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+    with: {
+      user: true,
+      items: {
+        with: {
+          menuItem: true,
+          variant: {
+            with: {
+              variant: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    orders: results,
+    stats,
+    pagination: {
+      totalItems,
+      totalPages: limit ? Math.ceil(totalItems / limit) : 1,
+      currentPage: page ? parseInt(page, 10) : 1,
+      perPage: limit || totalItems,
+    }
+  };
+};
+
+export const getOrderById = async (id) => {
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, id),
+    with: {
+      user: true,
+      items: {
+        with: {
+          menuItem: true,
+          variant: { with: { variant: true } },
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new NotFoundError("Order not found");
+  }
+
+  return order;
+};
+
+export const updateOrderStatus = async (id, { status }) => {
+  const orderRecord = await db.query.orders.findFirst({
+    where: eq(orders.id, id),
+  });
+
+  if (!orderRecord) {
+    throw new NotFoundError("Order not found");
+  }
+
+  const previousStatus = orderRecord.status;
+
+  // Guard: prevent invalid/no-op transitions
+  if (previousStatus === status) {
+    return await db.query.orders.findFirst({
+      where: eq(orders.id, id),
+      with: { user: true, items: { with: { menuItem: true, variant: { with: { variant: true } } } } },
+    });
+  }
+
+  const [updatedOrder] = await db
+    .update(orders)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(orders.id, id))
+    .returning();
+
+  // ── AWARD POINTS on first approval / prep ───────────────────────────────
+  const newlyApproved = (status === "approved" || status === "preparing") && (previousStatus === "pending" || previousStatus === "approved" && status !== "preparing");
+  // Simplified: award if transitioning TO approved or preparing, from pending
+  if ((status === "approved" || status === "preparing") && previousStatus === "pending") {
+    const finalAmount = parseFloat(orderRecord.totalAmount);
+    const pointsEarned = Math.floor(finalAmount); // 1 pt per ₹1 spent
+    if (pointsEarned > 0) {
+      await db.insert(loyaltyLedger).values({
+        userId: orderRecord.userId,
+        points: pointsEarned,
+        description: `Points earned on Order #${orderRecord.tokenNumber}`,
+      });
+    }
+  }
+
+  // ── RESTORE / REVERSE POINTS on cancellation ──────────────────────────────
+  if (status === "cancelled" && previousStatus !== "cancelled") {
+    // 1. Always restore redeemed points regardless of previous status
+    const pointsRedeemed = parseInt(orderRecord.pointsRedeemed) || 0;
+    if (pointsRedeemed > 0) {
+      await db.insert(loyaltyLedger).values({
+        userId: orderRecord.userId,
+        points: pointsRedeemed,
+        description: `Points restored — Order #${orderRecord.tokenNumber} cancelled`,
+      });
+    }
+
+    // 2. Reverse earned points if the order had already been approved
+    //    (approved → preparing → cancelled OR approved → cancelled)
+    const wasApproved = ["approved", "preparing", "completed"].includes(previousStatus);
+    if (wasApproved) {
+      const finalAmount = parseFloat(orderRecord.totalAmount);
+      const pointsToReverse = Math.floor(finalAmount);
+      if (pointsToReverse > 0) {
+        await db.insert(loyaltyLedger).values({
+          userId: orderRecord.userId,
+          points: -pointsToReverse,
+          description: `Points reversed — Order #${orderRecord.tokenNumber} cancelled`,
+        });
+      }
+    }
+  }
+
+  return await db.query.orders.findFirst({
+    where: eq(orders.id, updatedOrder.id),
+    with: {
+      user: true,
+      items: {
+        with: {
+          menuItem: true,
+          variant: { with: { variant: true } },
+        },
+      },
+    },
+  });
 };
 

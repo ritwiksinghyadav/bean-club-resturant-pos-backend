@@ -265,3 +265,33 @@ export const getRoles = async (req, res, next) => {
   }
 };
 
+export const getOrders = async (req, res, next) => {
+  try {
+    const data = await adminService.getAdminOrders(req.query);
+    return ApiResponse.success(res, data, 200, "Orders retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const order = await adminService.getOrderById(id);
+    return ApiResponse.success(res, { order }, 200, "Order retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changeOrderStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const order = await adminService.updateOrderStatus(id, { status });
+    return ApiResponse.success(res, { order }, 200, "Order status updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
