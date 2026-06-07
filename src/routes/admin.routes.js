@@ -236,4 +236,34 @@ router.put(
   adminController.changeOrderStatus
 );
 
+// --- Customer Loyalty Management ---
+router.get(
+  "/users",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  adminController.getCustomers
+);
+
+router.post(
+  "/users/:id/points",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  adminController.updateCustomerPoints
+);
+
+// --- Loyalty System Settings ---
+router.get(
+  "/settings",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  adminController.getSettings
+);
+
+router.put(
+  "/settings",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  adminController.updateSettings
+);
+
 export default router;

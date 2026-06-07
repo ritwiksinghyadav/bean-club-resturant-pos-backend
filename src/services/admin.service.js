@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { admins, categories, menuItems, itemVariants, tags, menuItemTags, variants, roles, orders, loyaltyLedger } from "../db/schema.js";
+import { admins, categories, menuItems, itemVariants, tags, menuItemTags, variants, roles, orders, loyaltyLedger, users, systemSettings } from "../db/schema.js";
 import { eq, and, ne, isNull, or, ilike, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -1088,8 +1088,29 @@ export const getAdminOrders = async (query = {}) => {
     },
   });
 
+  const ordersWithPoints = await Promise.all(
+    results.map(async (o) => {
+      let earnedPoints = 0;
+      if (["approved", "preparing", "completed"].includes(o.status)) {
+        const ledgerEntry = await db.query.loyaltyLedger.findFirst({
+          where: and(
+            eq(loyaltyLedger.userId, o.userId),
+            eq(loyaltyLedger.description, `Points earned on Order #${o.tokenNumber}`)
+          ),
+        });
+        if (ledgerEntry) {
+          earnedPoints = ledgerEntry.points;
+        }
+      }
+      return {
+        ...o,
+        earnedPoints,
+      };
+    })
+  );
+
   return {
-    orders: results,
+    orders: ordersWithPoints,
     stats,
     pagination: {
       totalItems,
@@ -1118,7 +1139,23 @@ export const getOrderById = async (id) => {
     throw new NotFoundError("Order not found");
   }
 
-  return order;
+  let earnedPoints = 0;
+  if (["approved", "preparing", "completed"].includes(order.status)) {
+    const ledgerEntry = await db.query.loyaltyLedger.findFirst({
+      where: and(
+        eq(loyaltyLedger.userId, order.userId),
+        eq(loyaltyLedger.description, `Points earned on Order #${order.tokenNumber}`)
+      ),
+    });
+    if (ledgerEntry) {
+      earnedPoints = ledgerEntry.points;
+    }
+  }
+
+  return {
+    ...order,
+    earnedPoints,
+  };
 };
 
 export const updateOrderStatus = async (id, { status }) => {
@@ -1147,11 +1184,16 @@ export const updateOrderStatus = async (id, { status }) => {
     .returning();
 
   // ── AWARD POINTS on first approval / prep ───────────────────────────────
-  const newlyApproved = (status === "approved" || status === "preparing") && (previousStatus === "pending" || previousStatus === "approved" && status !== "preparing");
-  // Simplified: award if transitioning TO approved or preparing, from pending
   if ((status === "approved" || status === "preparing") && previousStatus === "pending") {
     const finalAmount = parseFloat(orderRecord.totalAmount);
-    const pointsEarned = Math.floor(finalAmount); // 1 pt per ₹1 spent
+    
+    // Fetch settings ratio and max points limit
+    const ratioStr = await getSetting("loyalty_earning_percentage", "10");
+    const maxStr = await getSetting("loyalty_max_points_per_order", "100");
+    const ratio = parseInt(ratioStr, 10);
+    const maxPoints = parseInt(maxStr, 10);
+
+    const pointsEarned = Math.min(maxPoints, Math.floor(finalAmount * (ratio / 100)));
     if (pointsEarned > 0) {
       await db.insert(loyaltyLedger).values({
         userId: orderRecord.userId,
@@ -1174,11 +1216,16 @@ export const updateOrderStatus = async (id, { status }) => {
     }
 
     // 2. Reverse earned points if the order had already been approved
-    //    (approved → preparing → cancelled OR approved → cancelled)
+    //    (Query ledger entries to reverse the exact points awarded)
     const wasApproved = ["approved", "preparing", "completed"].includes(previousStatus);
     if (wasApproved) {
-      const finalAmount = parseFloat(orderRecord.totalAmount);
-      const pointsToReverse = Math.floor(finalAmount);
+      const earnedEntries = await db.query.loyaltyLedger.findMany({
+        where: and(
+          eq(loyaltyLedger.userId, orderRecord.userId),
+          eq(loyaltyLedger.description, `Points earned on Order #${orderRecord.tokenNumber}`)
+        ),
+      });
+      const pointsToReverse = earnedEntries.reduce((sum, entry) => sum + entry.points, 0);
       if (pointsToReverse > 0) {
         await db.insert(loyaltyLedger).values({
           userId: orderRecord.userId,
@@ -1189,7 +1236,7 @@ export const updateOrderStatus = async (id, { status }) => {
     }
   }
 
-  return await db.query.orders.findFirst({
+  const finalOrder = await db.query.orders.findFirst({
     where: eq(orders.id, updatedOrder.id),
     with: {
       user: true,
@@ -1201,5 +1248,164 @@ export const updateOrderStatus = async (id, { status }) => {
       },
     },
   });
+
+  let earnedPoints = 0;
+  if (["approved", "preparing", "completed"].includes(finalOrder.status)) {
+    const ledgerEntry = await db.query.loyaltyLedger.findFirst({
+      where: and(
+        eq(loyaltyLedger.userId, finalOrder.userId),
+        eq(loyaltyLedger.description, `Points earned on Order #${finalOrder.tokenNumber}`)
+      ),
+    });
+    if (ledgerEntry) {
+      earnedPoints = ledgerEntry.points;
+    }
+  }
+
+  return {
+    ...finalOrder,
+    earnedPoints,
+  };
 };
+
+// =========================================================================
+// 9. SYSTEM SETTINGS & CUSTOMER LOYALTY MANAGEMENT
+// =========================================================================
+
+export const getSetting = async (key, defaultValue) => {
+  try {
+    const record = await db.query.systemSettings.findFirst({
+      where: eq(systemSettings.key, key),
+    });
+    return record ? record.value : defaultValue.toString();
+  } catch (err) {
+    console.error(`Error fetching setting ${key}:`, err);
+    return defaultValue.toString();
+  }
+};
+
+export const setSetting = async (key, value) => {
+  const existing = await db.query.systemSettings.findFirst({
+    where: eq(systemSettings.key, key),
+  });
+  if (existing) {
+    await db
+      .update(systemSettings)
+      .set({ value: value.toString(), updatedAt: new Date() })
+      .where(eq(systemSettings.key, key));
+  } else {
+    await db.insert(systemSettings).values({
+      key,
+      value: value.toString(),
+    });
+  }
+};
+
+export const getSettings = async () => {
+  const ratio = await getSetting("loyalty_earning_percentage", "10");
+  const max = await getSetting("loyalty_max_points_per_order", "100");
+  return {
+    earningRatioPercentage: parseInt(ratio, 10),
+    maxEarningPoints: parseInt(max, 10),
+  };
+};
+
+export const updateSettings = async ({ earningRatioPercentage, maxEarningPoints }) => {
+  if (earningRatioPercentage !== undefined) {
+    await setSetting("loyalty_earning_percentage", earningRatioPercentage);
+  }
+  if (maxEarningPoints !== undefined) {
+    await setSetting("loyalty_max_points_per_order", maxEarningPoints);
+  }
+  return await getSettings();
+};
+
+export const getCustomers = async (query = {}) => {
+  const { page, perPage, name } = query;
+  
+  const whereClauses = [eq(users.role, "user")];
+  if (name) {
+    whereClauses.push(
+      or(
+        ilike(users.name, `%${name}%`),
+        ilike(users.phoneNumber, `%${name}%`)
+      )
+    );
+  }
+  
+  const where = and(...whereClauses);
+
+  // Calculate total count
+  const countRes = await db
+    .select({ count: sql`count(*)` })
+    .from(users)
+    .where(where);
+  const totalItems = parseInt(countRes[0]?.count || 0, 10);
+
+  let limit = undefined;
+  let offset = undefined;
+  if (page && perPage) {
+    limit = parseInt(perPage, 10);
+    offset = (parseInt(page, 10) - 1) * limit;
+  }
+
+  const results = await db.query.users.findMany({
+    where,
+    limit,
+    offset,
+    with: {
+      loyaltyLedger: true,
+    },
+    orderBy: (users, { desc }) => [desc(users.createdAt)],
+  });
+
+  const customersList = results.map((c) => {
+    const pointsBalance = c.loyaltyLedger.reduce((sum, entry) => sum + entry.points, 0);
+    const { passwordHash, loyaltyLedger, ...rest } = c;
+    return {
+      ...rest,
+      pointsBalance,
+    };
+  });
+
+  return {
+    customers: customersList,
+    pagination: {
+      totalItems,
+      totalPages: limit ? Math.ceil(totalItems / limit) : 1,
+      currentPage: page ? parseInt(page, 10) : 1,
+      perPage: limit || totalItems,
+    },
+  };
+};
+
+export const adjustCustomerPoints = async (userId, { points, description }) => {
+  const customerRecord = await db.query.users.findFirst({
+    where: and(eq(users.id, userId), eq(users.role, "user")),
+  });
+
+  if (!customerRecord) {
+    throw new NotFoundError("Customer not found");
+  }
+
+  // Calculate current points balance to prevent negative balances
+  const ledger = await db.select().from(loyaltyLedger).where(eq(loyaltyLedger.userId, userId));
+  const currentPoints = ledger.reduce((sum, entry) => sum + entry.points, 0);
+
+  if (currentPoints + points < 0) {
+    throw new BadRequestError(`Cannot deduct ${Math.abs(points)} points. Customer only has ${currentPoints} points.`);
+  }
+
+  await db.insert(loyaltyLedger).values({
+    userId,
+    points,
+    description: description || (points > 0 ? "Points granted by Admin" : "Points deleted by Admin"),
+  });
+
+  return {
+    userId,
+    pointsBalance: currentPoints + points,
+  };
+};
+
 

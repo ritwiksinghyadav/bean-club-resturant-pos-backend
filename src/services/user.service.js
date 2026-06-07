@@ -155,7 +155,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
       });
     }
 
-    // 3. Process loyalty points redemption
+    // 3. Process loyalty points redemption (1 point = 1 rupee)
     let discount = 0;
     let pointsToDeduct = 0;
     if (pointsRedeemed > 0) {
@@ -170,9 +170,9 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
         throw new BadRequestError(`Insufficient loyalty points. Available: ${currentPoints}, requested: ${pointsRedeemed}`);
       }
 
-      // Max points to redeem cannot exceed the cost of the order (or order cost * 10)
-      pointsToDeduct = Math.min(pointsRedeemed, Math.floor(totalAmount * 10));
-      discount = pointsToDeduct * 0.10;
+      // Max points to redeem cannot exceed the cost of the order
+      pointsToDeduct = Math.min(pointsRedeemed, Math.floor(totalAmount));
+      discount = pointsToDeduct; // 1 point = 1 rupee
     }
 
     const netAmount = Math.max(0, totalAmount - discount);
@@ -226,7 +226,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
 };
 
 export const getCustomerOrders = async (userId) => {
-  return await db.query.orders.findMany({
+  const results = await db.query.orders.findMany({
     where: eq(orders.userId, userId),
     orderBy: [desc(orders.createdAt)],
     with: {
@@ -242,6 +242,27 @@ export const getCustomerOrders = async (userId) => {
       },
     },
   });
+
+  return await Promise.all(
+    results.map(async (o) => {
+      let earnedPoints = 0;
+      if (["approved", "preparing", "completed"].includes(o.status)) {
+        const ledgerEntry = await db.query.loyaltyLedger.findFirst({
+          where: and(
+            eq(loyaltyLedger.userId, o.userId),
+            eq(loyaltyLedger.description, `Points earned on Order #${o.tokenNumber}`)
+          ),
+        });
+        if (ledgerEntry) {
+          earnedPoints = ledgerEntry.points;
+        }
+      }
+      return {
+        ...o,
+        earnedPoints,
+      };
+    })
+  );
 };
 
 export const getCustomerLoyalty = async (userId) => {

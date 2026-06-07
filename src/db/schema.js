@@ -270,3 +270,12 @@ export const loyaltyLedgerRelations = relations(loyaltyLedger, ({ one }) => ({
   }),
 }));
 
+export const systemSettings = pgTable("system_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: text("value").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+

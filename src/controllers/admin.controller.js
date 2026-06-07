@@ -295,3 +295,43 @@ export const changeOrderStatus = async (req, res, next) => {
   }
 };
 
+export const getCustomers = async (req, res, next) => {
+  try {
+    const data = await adminService.getCustomers(req.query);
+    return ApiResponse.success(res, data, 200, "Customers retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateCustomerPoints = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { points, description } = req.body;
+    const result = await adminService.adjustCustomerPoints(id, { points, description });
+    return ApiResponse.success(res, result, 200, "Customer loyalty points adjusted successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSettings = async (req, res, next) => {
+  try {
+    const data = await adminService.getSettings();
+    return ApiResponse.success(res, data, 200, "Loyalty points settings retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateSettings = async (req, res, next) => {
+  try {
+    const { earningRatioPercentage, maxEarningPoints } = req.body;
+    const data = await adminService.updateSettings({ earningRatioPercentage, maxEarningPoints });
+    return ApiResponse.success(res, data, 200, "Loyalty points settings updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+

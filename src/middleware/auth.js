@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { UnauthorizedError, ForbiddenError } from "../utils/errors.js";
 import { db } from "../db/index.js";
-import { admins } from "../db/schema.js";
+import { admins, users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 
 /**
@@ -24,9 +24,20 @@ export const protect = async (req, res, next) => {
     // Verify token
     try {
       const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+      
+      // Ensure the user actually exists in the database
+      const userRecord = await db.query.users.findFirst({
+        where: eq(users.id, decoded.id),
+      });
+
+      if (!userRecord) {
+        throw new UnauthorizedError("The user belonging to this token no longer exists.");
+      }
+
       req.user = decoded;
       next();
     } catch (err) {
+      if (err instanceof UnauthorizedError) throw err;
       throw new UnauthorizedError("Invalid or expired token. Please log in again.");
     }
   } catch (error) {
