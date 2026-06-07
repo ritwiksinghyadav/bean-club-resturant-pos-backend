@@ -21,18 +21,30 @@ const generateTokens = (user) => {
 };
 
 export const registerUser = async ({ name, email, password, phoneNumber, bio }) => {
-  // Check if email already exists
-  const existingUser = await db.query.users.findFirst({
-    where: eq(users.email, email),
+  // Check if phone number already exists
+  const existingUserByPhone = await db.query.users.findFirst({
+    where: eq(users.phoneNumber, phoneNumber),
   });
 
-  if (existingUser) {
-    throw new BadRequestError("A user with this email already exists");
+  if (existingUserByPhone) {
+    throw new BadRequestError("A user with this phone number already exists");
   }
 
-  // Hash password
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(password, salt);
+  if (email) {
+    const existingUserByEmail = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    });
+    if (existingUserByEmail) {
+      throw new BadRequestError("A user with this email already exists");
+    }
+  }
+
+  // Hash password if provided
+  let passwordHash = null;
+  if (password) {
+    const salt = await bcrypt.genSalt(10);
+    passwordHash = await bcrypt.hash(password, salt);
+  }
 
   // Perform database transaction
   const result = await db.transaction(async (tx) => {
@@ -41,15 +53,15 @@ export const registerUser = async ({ name, email, password, phoneNumber, bio }) 
       .insert(users)
       .values({
         name,
-        email,
+        email: email || null,
         passwordHash,
+        phoneNumber,
       })
       .returning();
 
     // 2. Insert profile
     await tx.insert(profiles).values({
       userId: newUser.id,
-      phoneNumber,
       bio,
     });
 
@@ -61,7 +73,71 @@ export const registerUser = async ({ name, email, password, phoneNumber, bio }) 
   return userWithoutPassword;
 };
 
+export const loginOrRegisterCustomer = async ({ name, phoneNumber }) => {
+  if (!phoneNumber) {
+    throw new BadRequestError("Phone number is required");
+  }
+
+  // Find user by phone number
+  let user = await db.query.users.findFirst({
+    where: eq(users.phoneNumber, phoneNumber),
+    with: {
+      profile: true,
+    },
+  });
+
+  if (!user) {
+    if (!name) {
+      throw new BadRequestError("Name is required to register a new customer");
+    }
+
+    // Register a new customer
+    user = await db.transaction(async (tx) => {
+      const [newUser] = await tx
+        .insert(users)
+        .values({
+          name,
+          phoneNumber,
+          role: "user",
+        })
+        .returning();
+
+      // Create a default profile
+      await tx.insert(profiles).values({
+        userId: newUser.id,
+      });
+
+      return newUser;
+    });
+
+    // Fetch again to get profile relations if needed
+    user = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      with: {
+        profile: true,
+      },
+    });
+  } else if (name && user.name !== name) {
+    // Update name if they provided a different name
+    await db.update(users).set({ name }).where(eq(users.id, user.id));
+    user.name = name;
+  }
+
+  // Generate tokens
+  const tokens = generateTokens(user);
+
+  const { passwordHash: _, ...userWithoutPassword } = user;
+  return {
+    user: userWithoutPassword,
+    ...tokens,
+  };
+};
+
 export const loginUser = async ({ email, password }) => {
+  if (!email || !password) {
+    throw new BadRequestError("Email and password are required");
+  }
+
   // Find user with profile
   const user = await db.query.users.findFirst({
     where: eq(users.email, email),
@@ -70,7 +146,7 @@ export const loginUser = async ({ email, password }) => {
     },
   });
 
-  if (!user) {
+  if (!user || !user.passwordHash) {
     throw new UnauthorizedError("Invalid email or password");
   }
 

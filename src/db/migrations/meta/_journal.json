@@ -57,6 +57,13 @@
       "when": 1780557226895,
       "tag": "0007_third_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1780812748426,
+      "tag": "0008_cute_pestilence",
+      "breakpoints": true
     }
   ]
 }

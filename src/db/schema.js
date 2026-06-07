@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, primaryKey, uniqueIndex, integer } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // =========================================================================
@@ -8,8 +8,9 @@ import { relations } from "drizzle-orm";
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
-  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  passwordHash: varchar("password_hash", { length: 255 }),
+  phoneNumber: varchar("phone_number", { length: 20 }).notNull().unique(),
   role: varchar("role", { length: 50 }).default("user").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -21,15 +22,16 @@ export const profiles = pgTable("profiles", {
     .references(() => users.id, { onDelete: "cascade" })
     .notNull()
     .unique(),
-  phoneNumber: varchar("phone_number", { length: 20 }),
   avatarUrl: varchar("avatar_url", { length: 255 }),
   bio: text("bio"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const usersRelations = relations(users, ({ one }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(profiles),
+  orders: many(orders),
+  loyaltyLedger: many(loyaltyLedger),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -194,3 +196,74 @@ export const menuItemsRelations = relations(menuItems, ({ one, many }) => ({
   variants: many(itemVariants),
   tags: many(menuItemTags),
 }));
+
+// =========================================================================
+// 6. ORDERING & LOYALTY SCHEMAS
+// =========================================================================
+
+export const orders = pgTable("orders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, preparing, completed, cancelled
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const orderItems = pgTable("order_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  orderId: uuid("order_id")
+    .references(() => orders.id, { onDelete: "cascade" })
+    .notNull(),
+  menuItemId: uuid("menu_item_id")
+    .references(() => menuItems.id, { onDelete: "set null" }),
+  variantId: uuid("variant_id")
+    .references(() => itemVariants.id, { onDelete: "set null" }),
+  quantity: integer("quantity").notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(), // price at time of purchase
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const loyaltyLedger = pgTable("loyalty_ledger", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  points: integer("points").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  user: one(users, {
+    fields: [orders.userId],
+    references: [users.id],
+  }),
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id],
+  }),
+  menuItem: one(menuItems, {
+    fields: [orderItems.menuItemId],
+    references: [menuItems.id],
+  }),
+  variant: one(itemVariants, {
+    fields: [orderItems.variantId],
+    references: [itemVariants.id],
+  }),
+}));
+
+export const loyaltyLedgerRelations = relations(loyaltyLedger, ({ one }) => ({
+  user: one(users, {
+    fields: [loyaltyLedger.userId],
+    references: [users.id],
+  }),
+}));
+
