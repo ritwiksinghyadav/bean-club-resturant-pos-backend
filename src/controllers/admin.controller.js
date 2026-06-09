@@ -334,4 +334,42 @@ export const updateSettings = async (req, res, next) => {
   }
 };
 
+export const addOffer = async (req, res, next) => {
+  try {
+    const offer = await adminService.createOffer(req.body);
+    return ApiResponse.success(res, { offer }, 201, "Offer created successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getOffers = async (req, res, next) => {
+  try {
+    const data = await adminService.getOffers(req.query);
+    return ApiResponse.success(res, data, 200, "Offers retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const editOffer = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const offer = await adminService.updateOffer(id, req.body);
+    return ApiResponse.success(res, { offer }, 200, "Offer updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeOffer = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await adminService.deleteOffer(id);
+    return ApiResponse.success(res, result, 200, "Offer deleted successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 

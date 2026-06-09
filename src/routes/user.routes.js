@@ -16,5 +16,7 @@ router.put("/profile", protect, validate(updateProfileSchema), userController.up
 router.post("/orders", protect, userController.placeOrder);
 router.get("/orders", protect, userController.getOrders);
 router.get("/loyalty", protect, userController.getLoyaltyLedger);
+router.get("/offers", protect, userController.getOffers);
+router.post("/offers/validate", protect, userController.validateOffer);
 
 export default router;

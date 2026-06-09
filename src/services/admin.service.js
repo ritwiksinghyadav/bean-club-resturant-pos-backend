@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { admins, categories, menuItems, itemVariants, tags, menuItemTags, variants, roles, orders, loyaltyLedger, users, systemSettings } from "../db/schema.js";
+import { admins, categories, menuItems, itemVariants, tags, menuItemTags, variants, roles, orders, loyaltyLedger, users, systemSettings, offers } from "../db/schema.js";
 import { eq, and, ne, isNull, or, ilike, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -1075,6 +1075,7 @@ export const getAdminOrders = async (query = {}) => {
     orderBy: (orders, { desc }) => [desc(orders.createdAt)],
     with: {
       user: true,
+      offer: true,
       items: {
         with: {
           menuItem: true,
@@ -1126,6 +1127,7 @@ export const getOrderById = async (id) => {
     where: eq(orders.id, id),
     with: {
       user: true,
+      offer: true,
       items: {
         with: {
           menuItem: true,
@@ -1173,7 +1175,7 @@ export const updateOrderStatus = async (id, { status }) => {
   if (previousStatus === status) {
     return await db.query.orders.findFirst({
       where: eq(orders.id, id),
-      with: { user: true, items: { with: { menuItem: true, variant: { with: { variant: true } } } } },
+      with: { user: true, offer: true, items: { with: { menuItem: true, variant: { with: { variant: true } } } } },
     });
   }
 
@@ -1240,6 +1242,7 @@ export const updateOrderStatus = async (id, { status }) => {
     where: eq(orders.id, updatedOrder.id),
     with: {
       user: true,
+      offer: true,
       items: {
         with: {
           menuItem: true,
@@ -1406,6 +1409,132 @@ export const adjustCustomerPoints = async (userId, { points, description }) => {
     userId,
     pointsBalance: currentPoints + points,
   };
+};
+
+export const createOffer = async ({ code, description, discountType, discountValue, maxDiscount, minBillAmount }) => {
+  const existingOffer = await db.query.offers.findFirst({
+    where: eq(offers.code, code.toUpperCase()),
+  });
+
+  if (existingOffer) {
+    throw new BadRequestError(`Offer with code '${code}' already exists`);
+  }
+
+  const [newOffer] = await db
+    .insert(offers)
+    .values({
+      code: code.toUpperCase(),
+      description,
+      discountType,
+      discountValue: discountValue.toString(),
+      maxDiscount: maxDiscount ? maxDiscount.toString() : null,
+      minBillAmount: minBillAmount ? minBillAmount.toString() : "0.00",
+      isActive: true,
+    })
+    .returning();
+
+  return newOffer;
+};
+
+export const getOffers = async (query = {}) => {
+  const { page, perPage, code, sortBy = "createdAt", sortOrder = "desc" } = query;
+  
+  const whereClauses = [];
+  
+  if (code) {
+    whereClauses.push(ilike(offers.code, `%${code}%`));
+  }
+  
+  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  
+  // Calculate total count
+  const countRes = await db
+    .select({ count: sql`count(*)` })
+    .from(offers)
+    .where(where);
+  const totalItems = parseInt(countRes[0]?.count || 0, 10);
+  
+  // Pagination values
+  let limit = undefined;
+  let offset = undefined;
+  if (page && perPage) {
+    limit = parseInt(perPage, 10);
+    offset = (parseInt(page, 10) - 1) * limit;
+  }
+  
+  let orderColumn = offers.createdAt;
+  if (sortBy === "code") orderColumn = offers.code;
+  if (sortBy === "isActive") orderColumn = offers.isActive;
+  
+  const results = await db.query.offers.findMany({
+    where,
+    limit,
+    offset,
+    orderBy: (offers, { asc, desc }) => [
+      sortOrder.toLowerCase() === "asc" ? asc(orderColumn) : desc(orderColumn)
+    ],
+  });
+  
+  return {
+    offers: results,
+    pagination: {
+      totalItems,
+      totalPages: limit ? Math.ceil(totalItems / limit) : 1,
+      currentPage: page ? parseInt(page, 10) : 1,
+      perPage: limit || totalItems,
+    }
+  };
+};
+
+export const updateOffer = async (id, { code, description, discountType, discountValue, maxDiscount, minBillAmount, isActive }) => {
+  const offerRecord = await db.query.offers.findFirst({
+    where: eq(offers.id, id),
+  });
+
+  if (!offerRecord) {
+    throw new NotFoundError("Offer not found");
+  }
+
+  const updates = {};
+  if (description !== undefined) updates.description = description;
+  if (discountType !== undefined) updates.discountType = discountType;
+  if (discountValue !== undefined) updates.discountValue = discountValue.toString();
+  if (maxDiscount !== undefined) updates.maxDiscount = maxDiscount ? maxDiscount.toString() : null;
+  if (minBillAmount !== undefined) updates.minBillAmount = minBillAmount ? minBillAmount.toString() : "0.00";
+  if (isActive !== undefined) updates.isActive = isActive;
+  
+  if (code !== undefined) {
+    const existing = await db.query.offers.findFirst({
+      where: and(eq(offers.code, code.toUpperCase()), ne(offers.id, id)),
+    });
+    if (existing) {
+      throw new BadRequestError(`Offer with code '${code}' already exists`);
+    }
+    updates.code = code.toUpperCase();
+  }
+
+  updates.updatedAt = new Date();
+
+  const [updatedOffer] = await db
+    .update(offers)
+    .set(updates)
+    .where(eq(offers.id, id))
+    .returning();
+
+  return updatedOffer;
+};
+
+export const deleteOffer = async (id) => {
+  const offerRecord = await db.query.offers.findFirst({
+    where: eq(offers.id, id),
+  });
+
+  if (!offerRecord) {
+    throw new NotFoundError("Offer not found");
+  }
+
+  await db.delete(offers).where(eq(offers.id, id));
+  return { id };
 };
 
 

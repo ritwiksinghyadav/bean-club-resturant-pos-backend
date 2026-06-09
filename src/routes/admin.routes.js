@@ -18,6 +18,7 @@ import {
   createAdminSchema,
   updateAdminSchema
 } from "../validators/admin.validator.js";
+import { createOfferSchema, updateOfferSchema } from "../validators/offer.validator.js";
 
 const router = Router();
 
@@ -264,6 +265,36 @@ router.put(
   protectAdmin,
   restrictTo("admin", "superadmin"),
   adminController.updateSettings
+);
+
+// --- Offer CRUD Routes ---
+router.get(
+  "/offers",
+  protectAdmin,
+  adminController.getOffers
+);
+
+router.post(
+  "/offers",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  validate(createOfferSchema),
+  adminController.addOffer
+);
+
+router.put(
+  "/offers/:id",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  validate(updateOfferSchema),
+  adminController.editOffer
+);
+
+router.delete(
+  "/offers/:id",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  adminController.removeOffer
 );
 
 export default router;

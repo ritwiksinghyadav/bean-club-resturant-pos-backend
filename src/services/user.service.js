@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { users, profiles, categories, menuItems, itemVariants, orders, orderItems, loyaltyLedger } from "../db/schema.js";
+import { users, profiles, categories, menuItems, itemVariants, orders, orderItems, loyaltyLedger, offers } from "../db/schema.js";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
 
@@ -109,7 +109,7 @@ export const getCustomerMenu = async () => {
   return activeCategories;
 };
 
-export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
+export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offerCode = null) => {
   if (!items || items.length === 0) {
     throw new BadRequestError("Order must contain at least one item");
   }
@@ -155,8 +155,36 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
       });
     }
 
+    // 2.5 Process Offer Discount first
+    let offerDiscount = 0;
+    let offerId = null;
+    if (offerCode) {
+      const offer = await tx.query.offers.findFirst({
+        where: and(eq(offers.code, offerCode.toUpperCase()), eq(offers.isActive, true)),
+      });
+      if (!offer) {
+        throw new BadRequestError(`Invalid or inactive offer code: ${offerCode}`);
+      }
+      if (totalAmount < parseFloat(offer.minBillAmount)) {
+        throw new BadRequestError(`Minimum bill amount to apply this offer is ₹${parseFloat(offer.minBillAmount).toFixed(2)}`);
+      }
+
+      if (offer.discountType === "percentage") {
+        let calculated = (totalAmount * parseFloat(offer.discountValue)) / 100;
+        if (offer.maxDiscount && parseFloat(offer.maxDiscount) > 0) {
+          calculated = Math.min(calculated, parseFloat(offer.maxDiscount));
+        }
+        offerDiscount = calculated;
+      } else if (offer.discountType === "fixed") {
+        offerDiscount = Math.min(parseFloat(offer.discountValue), totalAmount);
+      }
+      offerId = offer.id;
+    }
+
+    const remainingAmount = Math.max(0, totalAmount - offerDiscount);
+
     // 3. Process loyalty points redemption (1 point = 1 rupee)
-    let discount = 0;
+    let loyaltyDiscount = 0;
     let pointsToDeduct = 0;
     if (pointsRedeemed > 0) {
       // Fetch user's current loyalty points balance
@@ -170,12 +198,13 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
         throw new BadRequestError(`Insufficient loyalty points. Available: ${currentPoints}, requested: ${pointsRedeemed}`);
       }
 
-      // Max points to redeem cannot exceed the cost of the order
-      pointsToDeduct = Math.min(pointsRedeemed, Math.floor(totalAmount));
-      discount = pointsToDeduct; // 1 point = 1 rupee
+      // Max points to redeem cannot exceed the cost of the order after offer
+      pointsToDeduct = Math.min(pointsRedeemed, Math.floor(remainingAmount));
+      loyaltyDiscount = pointsToDeduct; // 1 point = 1 rupee
     }
 
-    const netAmount = Math.max(0, totalAmount - discount);
+    const totalDiscount = offerDiscount + loyaltyDiscount;
+    const netAmount = Math.max(0, totalAmount - totalDiscount);
     const tax = netAmount * 0.05; // 5% GST/Tax
     const finalAmount = netAmount + tax;
     
@@ -191,7 +220,9 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
         totalAmount: finalAmount.toFixed(2),
         tokenNumber,
         pointsRedeemed: pointsToDeduct,
-        discount: discount.toFixed(2),
+        discount: totalDiscount.toFixed(2),
+        offerId,
+        offerDiscount: offerDiscount.toFixed(2),
       })
       .returning();
 
@@ -215,9 +246,17 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0) => {
     // 7. Loyalty points are awarded when the order is APPROVED (not on placement)
     // See: admin.service.js updateOrderStatus
 
+    // Retrieve order with populated offer relation
+    const orderWithOffer = await tx.query.orders.findFirst({
+      where: eq(orders.id, newOrder.id),
+      with: {
+        offer: true
+      }
+    });
+
     return {
-      order: newOrder,
-      discount,
+      order: orderWithOffer,
+      discount: totalDiscount,
       tax,
       originalAmount: totalAmount,
       pointsEarned: 0, // will be credited on approval
@@ -230,6 +269,7 @@ export const getCustomerOrders = async (userId) => {
     where: eq(orders.userId, userId),
     orderBy: [desc(orders.createdAt)],
     with: {
+      offer: true,
       items: {
         with: {
           menuItem: true,
@@ -276,5 +316,43 @@ export const getCustomerLoyalty = async (userId) => {
   return {
     balance: totalPoints,
     ledger,
+  };
+};
+
+export const getActiveOffers = async () => {
+  return await db.query.offers.findMany({
+    where: eq(offers.isActive, true),
+    orderBy: [desc(offers.createdAt)],
+  });
+};
+
+export const validateOfferCode = async (code, subtotal) => {
+  const offer = await db.query.offers.findFirst({
+    where: and(eq(offers.code, code.toUpperCase()), eq(offers.isActive, true)),
+  });
+
+  if (!offer) {
+    throw new BadRequestError(`Invalid or inactive offer code: ${code}`);
+  }
+
+  const minBill = parseFloat(offer.minBillAmount);
+  if (parseFloat(subtotal) < minBill) {
+    throw new BadRequestError(`Minimum bill amount to apply this offer is ₹${minBill.toFixed(2)}`);
+  }
+
+  let discountAmount = 0;
+  if (offer.discountType === "percentage") {
+    discountAmount = (parseFloat(subtotal) * parseFloat(offer.discountValue)) / 100;
+    if (offer.maxDiscount && parseFloat(offer.maxDiscount) > 0) {
+      discountAmount = Math.min(discountAmount, parseFloat(offer.maxDiscount));
+    }
+  } else if (offer.discountType === "fixed") {
+    discountAmount = Math.min(parseFloat(offer.discountValue), parseFloat(subtotal));
+  }
+
+  return {
+    valid: true,
+    discountAmount,
+    offer,
   };
 };

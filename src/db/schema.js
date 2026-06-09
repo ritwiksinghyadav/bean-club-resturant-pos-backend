@@ -198,6 +198,23 @@ export const menuItemsRelations = relations(menuItems, ({ one, many }) => ({
 }));
 
 // =========================================================================
+// 5.5 OFFERS SCHEMA
+// =========================================================================
+
+export const offers = pgTable("offers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  description: text("description").notNull(),
+  discountType: varchar("discount_type", { length: 20 }).notNull(), // 'percentage' | 'fixed'
+  discountValue: decimal("discount_value", { precision: 10, scale: 2 }).notNull(),
+  maxDiscount: decimal("max_discount", { precision: 10, scale: 2 }), // Cap for percentage discounts
+  minBillAmount: decimal("min_bill_amount", { precision: 10, scale: 2 }).default("0.00").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// =========================================================================
 // 6. ORDERING & LOYALTY SCHEMAS
 // =========================================================================
 
@@ -211,6 +228,9 @@ export const orders = pgTable("orders", {
   tokenNumber: varchar("token_number", { length: 50 }),
   pointsRedeemed: integer("points_redeemed").default(0).notNull(),
   discount: decimal("discount", { precision: 10, scale: 2 }).default("0.00").notNull(),
+  offerId: uuid("offer_id")
+    .references(() => offers.id, { onDelete: "set null" }),
+  offerDiscount: decimal("offer_discount", { precision: 10, scale: 2 }).default("0.00").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -246,6 +266,14 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [users.id],
   }),
   items: many(orderItems),
+  offer: one(offers, {
+    fields: [orders.offerId],
+    references: [offers.id],
+  }),
+}));
+
+export const offersRelations = relations(offers, ({ many }) => ({
+  orders: many(orders),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({

@@ -44,8 +44,8 @@ export const loginCustomer = async (req, res, next) => {
 export const placeOrder = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { items, pointsRedeemed } = req.body;
-    const orderData = await userService.placeCustomerOrder(userId, items, pointsRedeemed);
+    const { items, pointsRedeemed, offerCode } = req.body;
+    const orderData = await userService.placeCustomerOrder(userId, items, pointsRedeemed, offerCode);
     return ApiResponse.success(res, orderData, 201, "Order placed successfully");
   } catch (error) {
     next(error);
@@ -67,6 +67,25 @@ export const getLoyaltyLedger = async (req, res, next) => {
     const userId = req.user.id;
     const loyalty = await userService.getCustomerLoyalty(userId);
     return ApiResponse.success(res, loyalty, 200, "Loyalty points ledger retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getOffers = async (req, res, next) => {
+  try {
+    const offers = await userService.getActiveOffers();
+    return ApiResponse.success(res, { offers }, 200, "Active offers retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const validateOffer = async (req, res, next) => {
+  try {
+    const { code, billAmount } = req.body;
+    const data = await userService.validateOfferCode(code, billAmount);
+    return ApiResponse.success(res, data, 200, "Offer validated successfully");
   } catch (error) {
     next(error);
   }
