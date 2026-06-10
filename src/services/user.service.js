@@ -19,13 +19,12 @@ export const getUserById = async (id) => {
   return userWithoutPassword;
 };
 
-export const updateUserProfile = async (id, { name, phoneNumber, bio, avatarUrl }) => {
+export const updateUserProfile = async (id, { name, bio, avatarUrl }) => {
   // Run updates in a transaction
   await db.transaction(async (tx) => {
     // 1. Update user fields
     const userUpdates = {};
     if (name !== undefined) userUpdates.name = name;
-    if (phoneNumber !== undefined) userUpdates.phoneNumber = phoneNumber;
 
     if (Object.keys(userUpdates).length > 0) {
       userUpdates.updatedAt = new Date();

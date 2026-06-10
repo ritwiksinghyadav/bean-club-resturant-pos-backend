@@ -6,14 +6,22 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { BadRequestError, UnauthorizedError, NotFoundError } from "../utils/errors.js";
 
-const generateAdminToken = (admin) => {
+const generateAdminTokens = (admin) => {
   const payload = { 
     id: admin.id, 
     email: admin.email, 
     role: admin.role.name 
   };
   
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET);
+  const accessToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: env.JWT_ACCESS_EXPIRATION,
+  });
+  
+  const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+    expiresIn: env.JWT_REFRESH_EXPIRATION,
+  });
+  
+  return { accessToken, refreshToken };
 };
 
 export const loginAdmin = async ({ email, password }) => {
@@ -40,7 +48,7 @@ export const loginAdmin = async ({ email, password }) => {
     throw new UnauthorizedError("Invalid email or password");
   }
 
-  const token = generateAdminToken(adminUser);
+  const tokens = generateAdminTokens(adminUser);
 
   const { passwordHash: _, ...adminWithoutPassword } = adminUser;
   return {
@@ -50,9 +58,53 @@ export const loginAdmin = async ({ email, password }) => {
       email: adminWithoutPassword.email,
       role: adminWithoutPassword.role.name,
     },
-    token,
+    ...tokens,
+    token: tokens.accessToken, // Backwards compatibility with next-auth client if needed
   };
 };
+
+export const refreshAdminToken = async ({ refreshToken }) => {
+  if (!refreshToken) {
+    throw new BadRequestError("Refresh token is required");
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET);
+    
+    // Find admin with role name
+    const adminUser = await db.query.admins.findFirst({
+      where: eq(admins.id, decoded.id),
+      with: {
+        role: true,
+      },
+    });
+
+    if (!adminUser) {
+      throw new UnauthorizedError("Admin user no longer exists");
+    }
+
+    if (!adminUser.isActive) {
+      throw new UnauthorizedError("Your account has been deactivated. Please contact a superadmin.");
+    }
+
+    const tokens = generateAdminTokens(adminUser);
+    
+    const { passwordHash: _, ...adminWithoutPassword } = adminUser;
+    return {
+      admin: {
+        id: adminWithoutPassword.id,
+        name: adminWithoutPassword.name,
+        email: adminWithoutPassword.email,
+        role: adminWithoutPassword.role.name,
+      },
+      ...tokens,
+      token: tokens.accessToken,
+    };
+  } catch (err) {
+    throw new UnauthorizedError("Invalid or expired refresh token");
+  }
+};
+
 
 export const createCategory = async ({ name, description }) => {
   // Check if category name already exists

@@ -11,6 +11,16 @@ export const login = async (req, res, next) => {
   }
 };
 
+export const refresh = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+    const data = await adminService.refreshAdminToken({ refreshToken });
+    return ApiResponse.success(res, data, 200, "Admin token refreshed successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const addCategory = async (req, res, next) => {
   try {
     const category = await adminService.createCategory(req.body);

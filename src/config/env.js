@@ -11,7 +11,7 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(8, "JWT_ACCESS_SECRET must be at least 8 characters"),
   JWT_REFRESH_SECRET: z.string().min(8, "JWT_REFRESH_SECRET must be at least 8 characters"),
   JWT_ACCESS_EXPIRATION: z.string().default("15m"),
-  JWT_REFRESH_EXPIRATION: z.string().default("7d"),
+  JWT_REFRESH_EXPIRATION: z.string().default("60d"),
 });
 
 const parseEnv = () => {

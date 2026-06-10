@@ -41,6 +41,16 @@ export const loginCustomer = async (req, res, next) => {
   }
 };
 
+export const refreshCustomerToken = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+    const authData = await authService.refreshCustomerToken({ refreshToken });
+    return ApiResponse.success(res, authData, 200, "Customer token refreshed successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const placeOrder = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -90,3 +100,47 @@ export const validateOffer = async (req, res, next) => {
     next(error);
   }
 };
+
+export const sendCustomerOTP = async (req, res, next) => {
+  try {
+    const { phoneNumber, name, mode } = req.body;
+    const result = await authService.sendCustomerOtp({ phoneNumber, name, mode });
+    return ApiResponse.success(res, result, 200, "OTP sent successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyCustomerOTP = async (req, res, next) => {
+  try {
+     const { phoneNumber, name, code, mode } = req.body;
+     const authData = await authService.verifyCustomerOtp({ phoneNumber, name, code, mode });
+     return ApiResponse.success(res, authData, 200, "Customer authenticated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const sendChangePhoneOTP = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { newPhoneNumber } = req.body;
+    const result = await authService.sendChangePhoneOtp(userId, { newPhoneNumber });
+    return ApiResponse.success(res, result, 200, "Change phone OTP sent successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyChangePhoneOTP = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { code } = req.body;
+    const user = await authService.verifyChangePhoneOtp(userId, { code });
+    return ApiResponse.success(res, { user }, 200, "Phone number updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+

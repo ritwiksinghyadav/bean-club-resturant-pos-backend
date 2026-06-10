@@ -19,11 +19,13 @@ import {
   updateAdminSchema
 } from "../validators/admin.validator.js";
 import { createOfferSchema, updateOfferSchema } from "../validators/offer.validator.js";
+import { refreshSchema } from "../validators/auth.validator.js";
 
 const router = Router();
 
 // Public Admin Auth
 router.post("/auth/login", validate(adminLoginSchema), adminController.login);
+router.post("/auth/refresh", validate(refreshSchema), adminController.refresh);
 
 // Protected Admin Management Routes (Requires admin or superadmin privileges for mutation)
 
