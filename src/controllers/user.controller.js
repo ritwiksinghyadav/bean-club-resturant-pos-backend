@@ -55,8 +55,8 @@ export const refreshCustomerToken = async (req, res, next) => {
 export const placeOrder = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { items, pointsRedeemed, offerCode } = req.body;
-    const orderData = await userService.placeCustomerOrder(userId, items, pointsRedeemed, offerCode);
+    const { items, pointsRedeemed, offerCode, type } = req.body;
+    const orderData = await userService.placeCustomerOrder(userId, items, pointsRedeemed, offerCode, type);
     return ApiResponse.success(res, orderData, 201, "Order placed successfully");
   } catch (error) {
     next(error);

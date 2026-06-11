@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "type" varchar(50) DEFAULT 'takeaway' NOT NULL;

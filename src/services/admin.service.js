@@ -7,6 +7,8 @@ import { env } from "../config/env.js";
 import { BadRequestError, UnauthorizedError, NotFoundError } from "../utils/errors.js";
 import { jobQueue } from "../utils/jobQueue.js";
 import { logger } from "../utils/logger.js";
+import { loginOrRegisterCustomer } from "./auth.service.js";
+import { placeCustomerOrder } from "./user.service.js";
 
 const generateAdminTokens = (admin) => {
   const payload = { 
@@ -1623,6 +1625,23 @@ export const deleteOffer = async (id) => {
 
   await db.delete(offers).where(eq(offers.id, id));
   return { id };
+};
+
+export const createOrderOnBehalf = async (adminId, { name, phoneNumber, items, type, pointsRedeemed, offerCode }) => {
+  // 1. Authenticate or register the customer by phone number (and name if registering)
+  const authData = await loginOrRegisterCustomer({ name, phoneNumber });
+
+  // 2. Place order for this customer (always placed as pending for POS/admin created orders)
+  const orderData = await placeCustomerOrder(authData.user.id, items, pointsRedeemed, offerCode, type);
+
+  return {
+    customer: authData.user,
+    order: orderData.order,
+    discount: orderData.discount,
+    tax: orderData.tax,
+    originalAmount: orderData.originalAmount,
+    pointsEarned: orderData.pointsEarned,
+  };
 };
 
 

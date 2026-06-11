@@ -401,4 +401,14 @@ export const removeOffer = async (req, res, next) => {
   }
 };
 
+export const createOrderOnBehalf = async (req, res, next) => {
+  try {
+    const adminId = req.user.id;
+    const orderData = await adminService.createOrderOnBehalf(adminId, req.body);
+    return ApiResponse.success(res, orderData, 201, "Order placed successfully on behalf of customer");
+  } catch (error) {
+    next(error);
+  }
+};
+
 

@@ -124,3 +124,20 @@ export const updateAdminSchema = {
   }),
 };
 
+export const createOrderOnBehalfSchema = {
+  body: z.object({
+    name: z.string().optional().default("Walk-in Customer"),
+    phoneNumber: z.string().regex(/^\d{10}$/, "Phone number must be exactly 10 digits"),
+    type: z.enum(["dinein", "takeaway"], { required_error: "Order type (dinein or takeaway) is required" }),
+    items: z.array(
+      z.object({
+        menuItemId: z.string().uuid("Invalid menu item ID"),
+        variantId: z.string().uuid("Invalid variant ID").nullable().optional(),
+        quantity: z.coerce.number().int().positive("Quantity must be a positive integer"),
+      })
+    ).min(1, "Order must contain at least one item"),
+    pointsRedeemed: z.coerce.number().int().nonnegative("Redeemed points must be non-negative").optional().default(0),
+    offerCode: z.string().nullable().optional(),
+  }),
+};
+

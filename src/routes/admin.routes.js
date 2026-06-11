@@ -17,7 +17,8 @@ import {
   createMasterVariantSchema,
   updateMasterVariantSchema,
   createAdminSchema,
-  updateAdminSchema
+  updateAdminSchema,
+  createOrderOnBehalfSchema
 } from "../validators/admin.validator.js";
 import { createOfferSchema, updateOfferSchema } from "../validators/offer.validator.js";
 import { refreshSchema } from "../validators/auth.validator.js";
@@ -232,6 +233,13 @@ router.get(
   "/orders",
   protectAdmin,
   adminController.getOrders
+);
+
+router.post(
+  "/orders/create-on-behalf",
+  protectAdmin,
+  validate(createOrderOnBehalfSchema),
+  adminController.createOrderOnBehalf
 );
 
 router.get(
