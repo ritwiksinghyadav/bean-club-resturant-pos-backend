@@ -22,6 +22,7 @@ router.post("/profile/change-phone-otp", protect, validate(changePhoneOtpSchema)
 router.post("/profile/verify-phone-otp", protect, validate(verifyChangePhoneOtpSchema), userController.verifyChangePhoneOTP);
 router.post("/orders", protect, userController.placeOrder);
 router.get("/orders", protect, userController.getOrders);
+router.get("/orders/stream", protect, userController.streamOrderUpdates);
 router.get("/loyalty", protect, userController.getLoyaltyLedger);
 router.get("/offers", protect, userController.getOffers);
 router.post("/offers/validate", protect, userController.validateOffer);

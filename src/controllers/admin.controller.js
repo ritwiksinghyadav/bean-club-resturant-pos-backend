@@ -1,5 +1,6 @@
 import * as adminService from "../services/admin.service.js";
 import { ApiResponse } from "../utils/response.js";
+import { sseManager } from "../utils/sseManager.js";
 
 export const login = async (req, res, next) => {
   try {
@@ -300,6 +301,24 @@ export const changeOrderStatus = async (req, res, next) => {
     const { status } = req.body;
     const order = await adminService.updateOrderStatus(id, { status });
     return ApiResponse.success(res, { order }, 200, "Order status updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const streamOrders = async (req, res, next) => {
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    sseManager.addAdmin(res);
+
+    req.on("close", () => {
+      sseManager.removeAdmin(res);
+    });
   } catch (error) {
     next(error);
   }

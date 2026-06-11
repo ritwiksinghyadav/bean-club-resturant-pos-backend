@@ -222,6 +222,12 @@ router.delete(
 
 // --- Order Routes ---
 router.get(
+  "/orders/stream",
+  protectAdmin,
+  adminController.streamOrders
+);
+
+router.get(
   "/orders",
   protectAdmin,
   adminController.getOrders

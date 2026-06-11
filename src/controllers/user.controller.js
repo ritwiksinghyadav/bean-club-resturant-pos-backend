@@ -1,6 +1,7 @@
 import * as userService from "../services/user.service.js";
 import * as authService from "../services/auth.service.js";
 import { ApiResponse } from "../utils/response.js";
+import { sseManager } from "../utils/sseManager.js";
 
 export const getProfile = async (req, res, next) => {
   try {
@@ -67,6 +68,26 @@ export const getOrders = async (req, res, next) => {
     const userId = req.user.id;
     const orders = await userService.getCustomerOrders(userId);
     return ApiResponse.success(res, { orders }, 200, "Orders retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const streamOrderUpdates = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    sseManager.addUser(userId, res);
+
+    req.on("close", () => {
+      sseManager.removeUser(userId, res);
+    });
   } catch (error) {
     next(error);
   }

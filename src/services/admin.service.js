@@ -5,6 +5,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { BadRequestError, UnauthorizedError, NotFoundError } from "../utils/errors.js";
+import { jobQueue } from "../utils/jobQueue.js";
+import { logger } from "../utils/logger.js";
 
 const generateAdminTokens = (admin) => {
   const payload = { 
@@ -1314,6 +1316,37 @@ export const updateOrderStatus = async (id, { status }) => {
     });
     if (ledgerEntry) {
       earnedPoints = ledgerEntry.points;
+    }
+  }
+
+  // Enqueue status change notification job for SSE streaming to client
+  try {
+    await jobQueue.publish("order.status_changed", {
+      orderId: finalOrder.id,
+      userId: finalOrder.userId,
+      status: finalOrder.status,
+      tokenNumber: finalOrder.tokenNumber,
+    });
+  } catch (error) {
+    logger.error("Failed to enqueue order.status_changed job:", error);
+  }
+
+  // Enqueue WhatsApp notification if order is completed
+  if (status === "completed") {
+    try {
+      const customerPhone = finalOrder.user?.phoneNumber;
+      if (customerPhone) {
+        await jobQueue.publish("whatsapp.order_completed", {
+          phone: customerPhone,
+          tokenNumber: finalOrder.tokenNumber,
+          orderId: finalOrder.id,
+          totalAmount: finalOrder.totalAmount,
+        });
+      } else {
+        logger.warn(`Could not enqueue WhatsApp message for completed order ${finalOrder.id} - customer has no phone number`);
+      }
+    } catch (error) {
+      logger.error("Failed to enqueue whatsapp.order_completed job:", error);
     }
   }
 

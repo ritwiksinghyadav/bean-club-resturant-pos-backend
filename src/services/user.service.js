@@ -2,6 +2,8 @@ import { db } from "../db/index.js";
 import { users, profiles, categories, menuItems, itemVariants, orders, orderItems, loyaltyLedger, offers } from "../db/schema.js";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
+import { jobQueue } from "../utils/jobQueue.js";
+import { logger } from "../utils/logger.js";
 
 export const getUserById = async (id) => {
   const user = await db.query.users.findFirst({
@@ -114,7 +116,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
   }
 
   // Calculate total and validate items inside a transaction
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     let totalAmount = 0;
     const orderItemsToInsert = [];
 
@@ -261,6 +263,15 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
       pointsEarned: 0, // will be credited on approval
     };
   });
+
+  // Enqueue new order notification job safely outside of transaction
+  try {
+    await jobQueue.publish("order.new", result.order);
+  } catch (error) {
+    logger.error("Failed to enqueue order.new job after order placement:", error);
+  }
+
+  return result;
 };
 
 export const getCustomerOrders = async (userId) => {
