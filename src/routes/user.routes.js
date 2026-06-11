@@ -1,9 +1,11 @@
 import { Router } from "express";
 import * as userController from "../controllers/user.controller.js";
+import * as feedbackController from "../controllers/feedback.controller.js";
 import { validate } from "../middleware/validate.js";
 import { protect } from "../middleware/auth.js";
 import { updateProfileSchema, changePhoneOtpSchema, verifyChangePhoneOtpSchema } from "../validators/user.validator.js";
 import { refreshSchema, sendCustomerOtpSchema, verifyCustomerOtpSchema, customerLoginSchema } from "../validators/auth.validator.js";
+import { createFeedbackSchema } from "../validators/feedback.validator.js";
 
 const router = Router();
 
@@ -26,5 +28,6 @@ router.get("/orders/stream", protect, userController.streamOrderUpdates);
 router.get("/loyalty", protect, userController.getLoyaltyLedger);
 router.get("/offers", protect, userController.getOffers);
 router.post("/offers/validate", protect, userController.validateOffer);
+router.post("/feedback", protect, validate(createFeedbackSchema), feedbackController.submitFeedback);
 
 export default router;

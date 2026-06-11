@@ -32,6 +32,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(profiles),
   orders: many(orders),
   loyaltyLedger: many(loyaltyLedger),
+  feedbacks: many(feedbacks),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -305,5 +306,24 @@ export const systemSettings = pgTable("system_settings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const feedbacks = pgTable("feedbacks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  rating: integer("rating").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const feedbacksRelations = relations(feedbacks, ({ one }) => ({
+  user: one(users, {
+    fields: [feedbacks.userId],
+    references: [users.id],
+  }),
+}));
 
 

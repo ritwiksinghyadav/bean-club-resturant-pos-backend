@@ -1073,11 +1073,14 @@ export const deleteAdmin = async (id, requesterId) => {
 };
 
 export const getAdminOrders = async (query = {}) => {
-  const { page, perPage, status } = query;
+  const { page, perPage, status, token } = query;
   
   const whereClauses = [];
   if (status && status !== 'all') {
     whereClauses.push(eq(orders.status, status));
+  }
+  if (token) {
+    whereClauses.push(ilike(orders.tokenNumber, `%${token}%`));
   }
   const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
 

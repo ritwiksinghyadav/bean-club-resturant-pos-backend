@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as adminController from "../controllers/admin.controller.js";
+import * as feedbackController from "../controllers/feedback.controller.js";
 import { protectAdmin, restrictTo } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { 
@@ -303,6 +304,21 @@ router.delete(
   protectAdmin,
   restrictTo("admin", "superadmin"),
   adminController.removeOffer
+);
+
+// --- Feedback Management Routes ---
+router.get(
+  "/feedback",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  feedbackController.getFeedbacks
+);
+
+router.delete(
+  "/feedback/:id",
+  protectAdmin,
+  restrictTo("admin", "superadmin"),
+  feedbackController.deleteFeedback
 );
 
 export default router;
