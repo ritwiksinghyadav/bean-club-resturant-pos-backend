@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 import { UnauthorizedError, ForbiddenError } from "../utils/errors.js";
 import { db } from "../db/index.js";
 import { admins, users } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 
 /**
  * Middleware to protect customer routes (standard users)
@@ -29,7 +29,7 @@ export const protect = async (req, res, next) => {
       
       // Ensure the user actually exists in the database
       const userRecord = await db.query.users.findFirst({
-        where: eq(users.id, decoded.id),
+        where: and(eq(users.id, decoded.id), isNull(users.deletedAt)),
       });
 
       if (!userRecord) {
@@ -71,7 +71,7 @@ export const protectAdmin = async (req, res, next) => {
       
       // Look up admin user to ensure their account exists and fetch their role
       const adminUser = await db.query.admins.findFirst({
-        where: eq(admins.id, decoded.id),
+        where: and(eq(admins.id, decoded.id), isNull(admins.deletedAt)),
         with: {
           role: true,
         },

@@ -7,7 +7,7 @@ import { logger } from "../utils/logger.js";
 
 export const getUserById = async (id) => {
   const user = await db.query.users.findFirst({
-    where: eq(users.id, id),
+    where: and(eq(users.id, id), isNull(users.deletedAt)),
     with: {
       profile: true,
     },
@@ -55,13 +55,13 @@ export const updateUserProfile = async (id, { name, bio, avatarUrl }) => {
 
 export const getCustomerMenu = async () => {
   const activeCategories = await db.query.categories.findMany({
-    where: eq(categories.isActive, true),
+    where: and(eq(categories.isActive, true), isNull(categories.deletedAt)),
     with: {
       menuItems: {
-        where: eq(menuItems.isActive, true),
+        where: and(eq(menuItems.isActive, true), isNull(menuItems.deletedAt)),
         with: {
           variants: {
-            where: eq(itemVariants.isActive, true),
+            where: and(eq(itemVariants.isActive, true), isNull(itemVariants.deletedAt)),
             with: {
               variant: true,
             },
@@ -80,11 +80,12 @@ export const getCustomerMenu = async () => {
   const uncategorisedItems = await db.query.menuItems.findMany({
     where: and(
       eq(menuItems.isActive, true),
-      isNull(menuItems.categoryId)
+      isNull(menuItems.categoryId),
+      isNull(menuItems.deletedAt)
     ),
     with: {
       variants: {
-        where: eq(itemVariants.isActive, true),
+        where: and(eq(itemVariants.isActive, true), isNull(itemVariants.deletedAt)),
         with: {
           variant: true,
         },
@@ -123,7 +124,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
     for (const item of items) {
       // 1. Fetch menu item
       const menuItem = await tx.query.menuItems.findFirst({
-        where: eq(menuItems.id, item.menuItemId),
+        where: and(eq(menuItems.id, item.menuItemId), isNull(menuItems.deletedAt)),
       });
 
       if (!menuItem || !menuItem.isActive) {
@@ -135,7 +136,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
       // 2. If variant is specified, look it up and use its price
       if (item.variantId) {
         const variant = await tx.query.itemVariants.findFirst({
-          where: eq(itemVariants.id, item.variantId),
+          where: and(eq(itemVariants.id, item.variantId), isNull(itemVariants.deletedAt)),
         });
 
         if (!variant || !variant.isActive || variant.menuItemId !== item.menuItemId) {
@@ -161,7 +162,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
     let offerId = null;
     if (offerCode) {
       const offer = await tx.query.offers.findFirst({
-        where: and(eq(offers.code, offerCode.toUpperCase()), eq(offers.isActive, true)),
+        where: and(eq(offers.code, offerCode.toUpperCase()), eq(offers.isActive, true), isNull(offers.deletedAt)),
       });
       if (!offer) {
         throw new BadRequestError(`Invalid or inactive offer code: ${offerCode}`);
@@ -332,14 +333,14 @@ export const getCustomerLoyalty = async (userId) => {
 
 export const getActiveOffers = async () => {
   return await db.query.offers.findMany({
-    where: eq(offers.isActive, true),
+    where: and(eq(offers.isActive, true), isNull(offers.deletedAt)),
     orderBy: [desc(offers.createdAt)],
   });
 };
 
 export const validateOfferCode = async (code, subtotal) => {
   const offer = await db.query.offers.findFirst({
-    where: and(eq(offers.code, code.toUpperCase()), eq(offers.isActive, true)),
+    where: and(eq(offers.code, code.toUpperCase()), eq(offers.isActive, true), isNull(offers.deletedAt)),
   });
 
   if (!offer) {

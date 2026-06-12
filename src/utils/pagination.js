@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { sql, and, ilike, or, desc, asc } from "drizzle-orm";
+import { sql, and, ilike, or, desc, asc, isNull } from "drizzle-orm";
 
 /**
  * Common pagination, searching, and sorting helper for Drizzle ORM
@@ -35,6 +35,9 @@ export const paginate = async (
 
   // Build where conditions
   const conditions = [...extraWhere];
+  if (tableSchema.deletedAt) {
+    conditions.push(isNull(tableSchema.deletedAt));
+  }
   if (search && searchColumns.length > 0) {
     const searchConditions = searchColumns
       .filter(col => tableSchema[col])

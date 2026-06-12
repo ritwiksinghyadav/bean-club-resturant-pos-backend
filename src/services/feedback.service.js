@@ -1,6 +1,6 @@
 import { db } from "../db/index.js";
 import { feedbacks, users } from "../db/schema.js";
-import { eq, and, desc, sql, or, ilike } from "drizzle-orm";
+import { eq, and, desc, sql, or, ilike, isNull } from "drizzle-orm";
 import { NotFoundError } from "../utils/errors.js";
 
 export const submitFeedback = async ({ userId, subject, description, rating }) => {
@@ -20,7 +20,7 @@ export const submitFeedback = async ({ userId, subject, description, rating }) =
 export const getAllFeedbacks = async (query = {}) => {
   const { page, perPage, rating, search } = query;
 
-  const whereClauses = [];
+  const whereClauses = [isNull(feedbacks.deletedAt)];
 
   if (rating && rating !== "all") {
     whereClauses.push(eq(feedbacks.rating, parseInt(rating, 10)));
@@ -98,13 +98,13 @@ export const getAllFeedbacks = async (query = {}) => {
 
 export const deleteFeedback = async (id) => {
   const feedbackRecord = await db.query.feedbacks.findFirst({
-    where: eq(feedbacks.id, id),
+    where: and(eq(feedbacks.id, id), isNull(feedbacks.deletedAt)),
   });
 
   if (!feedbackRecord) {
     throw new NotFoundError("Feedback not found");
   }
 
-  await db.delete(feedbacks).where(eq(feedbacks.id, id));
+  await db.update(feedbacks).set({ deletedAt: new Date() }).where(eq(feedbacks.id, id));
   return { id };
 };

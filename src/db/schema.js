@@ -14,6 +14,7 @@ export const users = pgTable("users", {
   role: varchar("role", { length: 50 }).default("user").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const profiles = pgTable("profiles", {
@@ -26,6 +27,7 @@ export const profiles = pgTable("profiles", {
   bio: text("bio"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -51,6 +53,7 @@ export const roles = pgTable("roles", {
   name: varchar("name", { length: 50 }).notNull().unique(), // kitchen, admin, superadmin
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const admins = pgTable("admins", {
@@ -64,6 +67,7 @@ export const admins = pgTable("admins", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const rolesRelations = relations(roles, ({ many }) => ({
@@ -88,6 +92,7 @@ export const categories = pgTable("categories", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const menuItems = pgTable("menu_items", {
@@ -101,6 +106,7 @@ export const menuItems = pgTable("menu_items", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
@@ -117,6 +123,7 @@ export const tags = pgTable("tags", {
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const menuItemTags = pgTable("menu_item_tags", {
@@ -155,6 +162,7 @@ export const variants = pgTable("variants", {
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const itemVariants = pgTable("item_variants", {
@@ -170,6 +178,7 @@ export const itemVariants = pgTable("item_variants", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 }, (table) => ({
   menuItemVariantIdx: uniqueIndex("menu_item_variant_idx").on(table.menuItemId, table.variantId),
 }));
@@ -213,6 +222,7 @@ export const offers = pgTable("offers", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 // =========================================================================
@@ -235,6 +245,7 @@ export const orders = pgTable("orders", {
   type: varchar("type", { length: 50 }).default("takeaway").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const orderItems = pgTable("order_items", {
@@ -250,6 +261,7 @@ export const orderItems = pgTable("order_items", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(), // price at time of purchase
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const loyaltyLedger = pgTable("loyalty_ledger", {
@@ -260,6 +272,7 @@ export const loyaltyLedger = pgTable("loyalty_ledger", {
   points: integer("points").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -306,6 +319,7 @@ export const systemSettings = pgTable("system_settings", {
   value: text("value").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const feedbacks = pgTable("feedbacks", {
@@ -318,6 +332,7 @@ export const feedbacks = pgTable("feedbacks", {
   rating: integer("rating").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const feedbacksRelations = relations(feedbacks, ({ one }) => ({

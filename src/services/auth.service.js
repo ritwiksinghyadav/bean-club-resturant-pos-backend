@@ -1,6 +1,6 @@
 import { db } from "../db/index.js";
 import { users, profiles } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
@@ -86,6 +86,10 @@ export const loginOrRegisterCustomer = async ({ name, phoneNumber }) => {
     },
   });
 
+  if (user && user.deletedAt) {
+    throw new UnauthorizedError("Your account has been deactivated or deleted. Please contact support.");
+  }
+
   if (!user) {
     if (!name) {
       throw new BadRequestError("Name is required to register a new customer");
@@ -140,7 +144,7 @@ export const loginUser = async ({ email, password }) => {
 
   // Find user with profile
   const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
+    where: and(eq(users.email, email), isNull(users.deletedAt)),
     with: {
       profile: true,
     },
@@ -176,7 +180,7 @@ export const refreshCustomerToken = async ({ refreshToken }) => {
     
     // Find user with profile
     const user = await db.query.users.findFirst({
-      where: eq(users.id, decoded.id),
+      where: and(eq(users.id, decoded.id), isNull(users.deletedAt)),
       with: {
         profile: true,
       },
@@ -224,6 +228,10 @@ export const sendCustomerOtp = async ({ phoneNumber, name, mode }) => {
   const existingUser = await db.query.users.findFirst({
     where: eq(users.phoneNumber, phoneNumber),
   });
+
+  if (existingUser && existingUser.deletedAt) {
+    throw new BadRequestError("Your account has been deactivated or deleted. Please contact support.");
+  }
 
   if (mode === "register") {
     if (existingUser) {

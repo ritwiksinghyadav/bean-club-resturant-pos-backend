@@ -31,7 +31,7 @@ const generateAdminTokens = (admin) => {
 export const loginAdmin = async ({ email, password }) => {
   // Find admin with role name
   const adminUser = await db.query.admins.findFirst({
-    where: eq(admins.email, email),
+    where: and(eq(admins.email, email), isNull(admins.deletedAt)),
     with: {
       role: true,
     },
@@ -77,7 +77,7 @@ export const refreshAdminToken = async ({ refreshToken }) => {
     
     // Find admin with role name
     const adminUser = await db.query.admins.findFirst({
-      where: eq(admins.id, decoded.id),
+      where: and(eq(admins.id, decoded.id), isNull(admins.deletedAt)),
       with: {
         role: true,
       },
@@ -113,7 +113,7 @@ export const refreshAdminToken = async ({ refreshToken }) => {
 export const createCategory = async ({ name, description }) => {
   // Check if category name already exists
   const existingCategory = await db.query.categories.findFirst({
-    where: eq(categories.name, name),
+    where: and(eq(categories.name, name), isNull(categories.deletedAt)),
   });
 
   if (existingCategory) {
@@ -135,7 +135,7 @@ export const createMenuItem = async ({ categoryId, name, description, basePrice,
   // Check if category exists
   if (categoryId) {
     const category = await db.query.categories.findFirst({
-      where: eq(categories.id, categoryId),
+      where: and(eq(categories.id, categoryId), isNull(categories.deletedAt)),
     });
 
     if (!category) {
@@ -147,7 +147,8 @@ export const createMenuItem = async ({ categoryId, name, description, basePrice,
   const existingItem = await db.query.menuItems.findFirst({
     where: and(
       categoryId ? eq(menuItems.categoryId, categoryId) : isNull(menuItems.categoryId),
-      eq(menuItems.name, name)
+      eq(menuItems.name, name),
+      isNull(menuItems.deletedAt)
     ),
   });
 
@@ -214,7 +215,7 @@ export const createMenuItem = async ({ categoryId, name, description, basePrice,
 export const createItemVariant = async ({ menuItemId, variantId, price, sku }) => {
   // Check if menu item exists
   const menuItem = await db.query.menuItems.findFirst({
-    where: eq(menuItems.id, menuItemId),
+    where: and(eq(menuItems.id, menuItemId), isNull(menuItems.deletedAt)),
   });
 
   if (!menuItem) {
@@ -223,7 +224,7 @@ export const createItemVariant = async ({ menuItemId, variantId, price, sku }) =
 
   // Check if global variant exists
   const variantRecord = await db.query.variants.findFirst({
-    where: eq(variants.id, variantId),
+    where: and(eq(variants.id, variantId), isNull(variants.deletedAt)),
   });
 
   if (!variantRecord) {
@@ -234,7 +235,8 @@ export const createItemVariant = async ({ menuItemId, variantId, price, sku }) =
   const existingMapping = await db.query.itemVariants.findFirst({
     where: and(
       eq(itemVariants.menuItemId, menuItemId),
-      eq(itemVariants.variantId, variantId)
+      eq(itemVariants.variantId, variantId),
+      isNull(itemVariants.deletedAt)
     ),
   });
 
@@ -245,7 +247,7 @@ export const createItemVariant = async ({ menuItemId, variantId, price, sku }) =
   // Check if SKU is provided and already taken
   if (sku) {
     const existingSku = await db.query.itemVariants.findFirst({
-      where: eq(itemVariants.sku, sku),
+      where: and(eq(itemVariants.sku, sku), isNull(itemVariants.deletedAt)),
     });
 
     if (existingSku) {
@@ -273,13 +275,13 @@ export const createItemVariant = async ({ menuItemId, variantId, price, sku }) =
 export const getCategories = async (query = {}) => {
   const { page, perPage, name, sortBy = "createdAt", sortOrder = "desc" } = query;
   
-  const whereClauses = [];
+  const whereClauses = [isNull(categories.deletedAt)];
   
   if (name) {
     whereClauses.push(sql`${categories.name} % ${name}`);
   }
   
-  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  const where = and(...whereClauses);
   
   // Calculate total count
   const countRes = await db
@@ -323,7 +325,7 @@ export const getCategories = async (query = {}) => {
 
 export const updateCategory = async (id, { name, description, isActive }) => {
   const category = await db.query.categories.findFirst({
-    where: eq(categories.id, id),
+    where: and(eq(categories.id, id), isNull(categories.deletedAt)),
   });
 
   if (!category) {
@@ -336,7 +338,7 @@ export const updateCategory = async (id, { name, description, isActive }) => {
   
   if (name !== undefined) {
     const existing = await db.query.categories.findFirst({
-      where: and(eq(categories.name, name), ne(categories.id, id)),
+      where: and(eq(categories.name, name), ne(categories.id, id), isNull(categories.deletedAt)),
     });
     if (existing) {
       throw new BadRequestError(`Category with name '${name}' already exists`);
@@ -357,21 +359,21 @@ export const updateCategory = async (id, { name, description, isActive }) => {
 
 export const deleteCategory = async (id) => {
   const category = await db.query.categories.findFirst({
-    where: eq(categories.id, id),
+    where: and(eq(categories.id, id), isNull(categories.deletedAt)),
   });
 
   if (!category) {
     throw new NotFoundError("Category not found");
   }
 
-  await db.delete(categories).where(eq(categories.id, id));
+  await db.update(categories).set({ deletedAt: new Date() }).where(eq(categories.id, id));
   return { id };
 };
 
 export const getMenuItems = async (query = {}) => {
   const { page, perPage, name, categoryId, sortBy = "createdAt", sortOrder = "desc" } = query;
   
-  const whereClauses = [];
+  const whereClauses = [isNull(menuItems.deletedAt)];
   
   if (categoryId) {
     whereClauses.push(eq(menuItems.categoryId, categoryId));
@@ -381,7 +383,7 @@ export const getMenuItems = async (query = {}) => {
     whereClauses.push(sql`${menuItems.name} % ${name}`);
   }
   
-  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  const where = and(...whereClauses);
   
   // Calculate total count
   const countRes = await db
@@ -411,6 +413,7 @@ export const getMenuItems = async (query = {}) => {
     with: {
       category: true,
       variants: {
+        where: isNull(itemVariants.deletedAt),
         with: {
           variant: true,
         },
@@ -458,7 +461,7 @@ export const getMenuItems = async (query = {}) => {
 
 export const updateMenuItem = async (id, { categoryId, name, description, basePrice, imageUrl, isActive, tagIds }) => {
   const item = await db.query.menuItems.findFirst({
-    where: eq(menuItems.id, id),
+    where: and(eq(menuItems.id, id), isNull(menuItems.deletedAt)),
   });
 
   if (!item) {
@@ -477,7 +480,7 @@ export const updateMenuItem = async (id, { categoryId, name, description, basePr
   if (categoryId !== undefined) {
     if (categoryId !== null) {
       const category = await db.query.categories.findFirst({
-        where: eq(categories.id, categoryId),
+        where: and(eq(categories.id, categoryId), isNull(categories.deletedAt)),
       });
       if (!category) {
         throw new NotFoundError("Category not found");
@@ -493,7 +496,8 @@ export const updateMenuItem = async (id, { categoryId, name, description, basePr
       where: and(
         eq(menuItems.name, name),
         targetCategoryId ? eq(menuItems.categoryId, targetCategoryId) : isNull(menuItems.categoryId),
-        ne(menuItems.id, id)
+        ne(menuItems.id, id),
+        isNull(menuItems.deletedAt)
       ),
     });
     if (existing) {
@@ -559,33 +563,33 @@ export const updateMenuItem = async (id, { categoryId, name, description, basePr
 
 export const deleteMenuItem = async (id) => {
   const item = await db.query.menuItems.findFirst({
-    where: eq(menuItems.id, id),
+    where: and(eq(menuItems.id, id), isNull(menuItems.deletedAt)),
   });
 
   if (!item) {
     throw new NotFoundError("Menu item not found");
   }
 
-  await db.delete(menuItems).where(eq(menuItems.id, id));
+  await db.update(menuItems).set({ deletedAt: new Date() }).where(eq(menuItems.id, id));
   return { id };
 };
 
 export const deleteItemVariant = async (id) => {
   const variant = await db.query.itemVariants.findFirst({
-    where: eq(itemVariants.id, id),
+    where: and(eq(itemVariants.id, id), isNull(itemVariants.deletedAt)),
   });
 
   if (!variant) {
     throw new NotFoundError("Variant not found");
   }
 
-  await db.delete(itemVariants).where(eq(itemVariants.id, id));
+  await db.update(itemVariants).set({ deletedAt: new Date() }).where(eq(itemVariants.id, id));
   return { id };
 };
 
 export const updateAdminStatus = async (targetAdminId, requesterId, { isActive }) => {
   const targetAdmin = await db.query.admins.findFirst({
-    where: eq(admins.id, targetAdminId),
+    where: and(eq(admins.id, targetAdminId), isNull(admins.deletedAt)),
   });
 
   if (!targetAdmin) {
@@ -610,7 +614,7 @@ export const updateAdminStatus = async (targetAdminId, requesterId, { isActive }
 
 export const updateItemVariant = async (id, { price, sku, isActive }) => {
   const variant = await db.query.itemVariants.findFirst({
-    where: eq(itemVariants.id, id),
+    where: and(eq(itemVariants.id, id), isNull(itemVariants.deletedAt)),
   });
 
   if (!variant) {
@@ -632,7 +636,7 @@ export const updateItemVariant = async (id, { price, sku, isActive }) => {
 
   // Fetch variant name to preserve output layout
   const variantRecord = await db.query.variants.findFirst({
-    where: eq(variants.id, updatedVariant.variantId)
+    where: and(eq(variants.id, updatedVariant.variantId), isNull(variants.deletedAt))
   });
 
   return {
@@ -669,13 +673,13 @@ export const createTag = async ({ name, description }) => {
 export const getTags = async (query = {}) => {
   const { page, perPage, name, sortBy = "createdAt", sortOrder = "desc" } = query;
   
-  const whereClauses = [];
+  const whereClauses = [isNull(tags.deletedAt)];
   
   if (name) {
     whereClauses.push(sql`${tags.name} % ${name}`);
   }
   
-  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  const where = and(...whereClauses);
   
   // Calculate total count
   const countRes = await db
@@ -717,7 +721,7 @@ export const getTags = async (query = {}) => {
 
 export const updateTag = async (id, { name, description }) => {
   const tagRecord = await db.query.tags.findFirst({
-    where: eq(tags.id, id),
+    where: and(eq(tags.id, id), isNull(tags.deletedAt)),
   });
 
   if (!tagRecord) {
@@ -729,7 +733,7 @@ export const updateTag = async (id, { name, description }) => {
   
   if (name !== undefined) {
     const existing = await db.query.tags.findFirst({
-      where: and(eq(tags.name, name), ne(tags.id, id)),
+      where: and(eq(tags.name, name), ne(tags.id, id), isNull(tags.deletedAt)),
     });
     if (existing) {
       throw new BadRequestError(`Tag with name '${name}' already exists`);
@@ -750,14 +754,14 @@ export const updateTag = async (id, { name, description }) => {
 
 export const deleteTag = async (id) => {
   const tagRecord = await db.query.tags.findFirst({
-    where: eq(tags.id, id),
+    where: and(eq(tags.id, id), isNull(tags.deletedAt)),
   });
 
   if (!tagRecord) {
     throw new NotFoundError("Tag not found");
   }
 
-  await db.delete(tags).where(eq(tags.id, id));
+  await db.update(tags).set({ deletedAt: new Date() }).where(eq(tags.id, id));
   return { id };
 };
 
@@ -788,13 +792,13 @@ export const createVariant = async ({ name, description }) => {
 export const getVariants = async (query = {}) => {
   const { page, perPage, name, sortBy = "createdAt", sortOrder = "desc" } = query;
   
-  const whereClauses = [];
+  const whereClauses = [isNull(variants.deletedAt)];
   
   if (name) {
     whereClauses.push(sql`${variants.name} % ${name}`);
   }
   
-  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  const where = and(...whereClauses);
   
   // Calculate total count
   const countRes = await db
@@ -836,7 +840,7 @@ export const getVariants = async (query = {}) => {
 
 export const updateVariant = async (id, { name, description }) => {
   const variantRecord = await db.query.variants.findFirst({
-    where: eq(variants.id, id),
+    where: and(eq(variants.id, id), isNull(variants.deletedAt)),
   });
 
   if (!variantRecord) {
@@ -848,7 +852,7 @@ export const updateVariant = async (id, { name, description }) => {
   
   if (name !== undefined) {
     const existing = await db.query.variants.findFirst({
-      where: and(eq(variants.name, name), ne(variants.id, id)),
+      where: and(eq(variants.name, name), ne(variants.id, id), isNull(variants.deletedAt)),
     });
     if (existing) {
       throw new BadRequestError(`Master variant with name '${name}' already exists`);
@@ -869,14 +873,14 @@ export const updateVariant = async (id, { name, description }) => {
 
 export const deleteVariant = async (id) => {
   const variantRecord = await db.query.variants.findFirst({
-    where: eq(variants.id, id),
+    where: and(eq(variants.id, id), isNull(variants.deletedAt)),
   });
 
   if (!variantRecord) {
     throw new NotFoundError("Master variant not found");
   }
 
-  await db.delete(variants).where(eq(variants.id, id));
+  await db.update(variants).set({ deletedAt: new Date() }).where(eq(variants.id, id));
   return { id };
 };
 
@@ -887,7 +891,7 @@ export const deleteVariant = async (id) => {
 export const getAdmins = async (query = {}) => {
   const { page, perPage, name, sortBy = "createdAt", sortOrder = "desc" } = query;
   
-  const whereClauses = [];
+  const whereClauses = [isNull(admins.deletedAt)];
   
   if (name) {
     whereClauses.push(
@@ -898,7 +902,7 @@ export const getAdmins = async (query = {}) => {
     );
   }
   
-  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  const where = and(...whereClauses);
   
   // Calculate total count
   const countRes = await db
@@ -997,7 +1001,7 @@ export const createAdmin = async ({ name, email, password, roleId }) => {
 
 export const updateAdmin = async (id, requesterId, { name, email, password, roleId, isActive }) => {
   const targetAdmin = await db.query.admins.findFirst({
-    where: eq(admins.id, id),
+    where: and(eq(admins.id, id), isNull(admins.deletedAt)),
   });
 
   if (!targetAdmin) {
@@ -1026,7 +1030,7 @@ export const updateAdmin = async (id, requesterId, { name, email, password, role
 
   if (email !== undefined) {
     const existing = await db.query.admins.findFirst({
-      where: and(eq(admins.email, email), ne(admins.id, id)),
+      where: and(eq(admins.email, email), ne(admins.id, id), isNull(admins.deletedAt)),
     });
     if (existing) {
       throw new BadRequestError(`Admin with email '${email}' already exists`);
@@ -1059,7 +1063,7 @@ export const updateAdmin = async (id, requesterId, { name, email, password, role
 
 export const deleteAdmin = async (id, requesterId) => {
   const targetAdmin = await db.query.admins.findFirst({
-    where: eq(admins.id, id),
+    where: and(eq(admins.id, id), isNull(admins.deletedAt)),
   });
 
   if (!targetAdmin) {
@@ -1070,7 +1074,7 @@ export const deleteAdmin = async (id, requesterId) => {
     throw new BadRequestError("You cannot delete your own admin account");
   }
 
-  await db.delete(admins).where(eq(admins.id, id));
+  await db.update(admins).set({ deletedAt: new Date() }).where(eq(admins.id, id));
   return { id };
 };
 
@@ -1416,7 +1420,7 @@ export const updateSettings = async ({ earningRatioPercentage, maxEarningPoints 
 export const getCustomers = async (query = {}) => {
   const { page, perPage, name } = query;
   
-  const whereClauses = [eq(users.role, "user")];
+  const whereClauses = [eq(users.role, "user"), isNull(users.deletedAt)];
   if (name) {
     whereClauses.push(
       or(
@@ -1529,13 +1533,13 @@ export const createOffer = async ({ code, description, discountType, discountVal
 export const getOffers = async (query = {}) => {
   const { page, perPage, code, sortBy = "createdAt", sortOrder = "desc" } = query;
   
-  const whereClauses = [];
+  const whereClauses = [isNull(offers.deletedAt)];
   
   if (code) {
     whereClauses.push(ilike(offers.code, `%${code}%`));
   }
   
-  const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;
+  const where = and(...whereClauses);
   
   // Calculate total count
   const countRes = await db
@@ -1578,7 +1582,7 @@ export const getOffers = async (query = {}) => {
 
 export const updateOffer = async (id, { code, description, discountType, discountValue, maxDiscount, minBillAmount, isActive }) => {
   const offerRecord = await db.query.offers.findFirst({
-    where: eq(offers.id, id),
+    where: and(eq(offers.id, id), isNull(offers.deletedAt)),
   });
 
   if (!offerRecord) {
@@ -1595,7 +1599,7 @@ export const updateOffer = async (id, { code, description, discountType, discoun
   
   if (code !== undefined) {
     const existing = await db.query.offers.findFirst({
-      where: and(eq(offers.code, code.toUpperCase()), ne(offers.id, id)),
+      where: and(eq(offers.code, code.toUpperCase()), ne(offers.id, id), isNull(offers.deletedAt)),
     });
     if (existing) {
       throw new BadRequestError(`Offer with code '${code}' already exists`);
@@ -1616,14 +1620,14 @@ export const updateOffer = async (id, { code, description, discountType, discoun
 
 export const deleteOffer = async (id) => {
   const offerRecord = await db.query.offers.findFirst({
-    where: eq(offers.id, id),
+    where: and(eq(offers.id, id), isNull(offers.deletedAt)),
   });
 
   if (!offerRecord) {
     throw new NotFoundError("Offer not found");
   }
 
-  await db.delete(offers).where(eq(offers.id, id));
+  await db.update(offers).set({ deletedAt: new Date() }).where(eq(offers.id, id));
   return { id };
 };
 
