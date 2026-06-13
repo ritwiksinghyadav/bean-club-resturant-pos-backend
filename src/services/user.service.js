@@ -111,7 +111,7 @@ export const getCustomerMenu = async () => {
   return activeCategories;
 };
 
-export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offerCode = null, type = "takeaway") => {
+export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offerCode = null, type = "takeaway", specialNote = null) => {
   if (!items || items.length === 0) {
     throw new BadRequestError("Order must contain at least one item");
   }
@@ -226,6 +226,7 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
         offerId,
         offerDiscount: offerDiscount.toFixed(2),
         type: type || "takeaway",
+        specialNote: specialNote || null,
       })
       .returning();
 

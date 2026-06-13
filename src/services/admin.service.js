@@ -1224,7 +1224,7 @@ export const getOrderById = async (id) => {
   };
 };
 
-export const updateOrderStatus = async (id, { status }) => {
+export const updateOrderStatus = async (id, { status, cancelReason }) => {
   const orderRecord = await db.query.orders.findFirst({
     where: eq(orders.id, id),
   });
@@ -1243,9 +1243,19 @@ export const updateOrderStatus = async (id, { status }) => {
     });
   }
 
+  if (status === "cancelled") {
+    if (!cancelReason || !cancelReason.trim()) {
+      throw new BadRequestError("Cancellation reason is mandatory when cancelling an order");
+    }
+  }
+
   const [updatedOrder] = await db
     .update(orders)
-    .set({ status, updatedAt: new Date() })
+    .set({ 
+      status, 
+      cancelReason: status === "cancelled" ? cancelReason.trim() : null,
+      updatedAt: new Date() 
+    })
     .where(eq(orders.id, id))
     .returning();
 
@@ -1631,12 +1641,12 @@ export const deleteOffer = async (id) => {
   return { id };
 };
 
-export const createOrderOnBehalf = async (adminId, { name, phoneNumber, items, type, pointsRedeemed, offerCode }) => {
+export const createOrderOnBehalf = async (adminId, { name, phoneNumber, items, type, pointsRedeemed, offerCode, specialNote }) => {
   // 1. Authenticate or register the customer by phone number (and name if registering)
   const authData = await loginOrRegisterCustomer({ name, phoneNumber });
 
   // 2. Place order for this customer (always placed as pending for POS/admin created orders)
-  const orderData = await placeCustomerOrder(authData.user.id, items, pointsRedeemed, offerCode, type);
+  const orderData = await placeCustomerOrder(authData.user.id, items, pointsRedeemed, offerCode, type, specialNote);
 
   return {
     customer: authData.user,

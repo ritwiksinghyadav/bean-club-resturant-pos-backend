@@ -245,6 +245,8 @@ export const orders = pgTable("orders", {
     .references(() => offers.id, { onDelete: "set null" }),
   offerDiscount: decimal("offer_discount", { precision: 10, scale: 2 }).default("0.00").notNull(),
   type: varchar("type", { length: 50 }).default("takeaway").notNull(),
+  specialNote: text("special_note"),
+  cancelReason: text("cancel_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),

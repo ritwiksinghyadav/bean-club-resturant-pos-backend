@@ -305,8 +305,8 @@ export const getOrder = async (req, res, next) => {
 export const changeOrderStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    const order = await adminService.updateOrderStatus(id, { status });
+    const { status, cancelReason } = req.body;
+    const order = await adminService.updateOrderStatus(id, { status, cancelReason });
     return ApiResponse.success(res, { order }, 200, "Order status updated successfully");
   } catch (error) {
     next(error);
