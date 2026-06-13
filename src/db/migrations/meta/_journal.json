@@ -113,6 +113,20 @@
       "when": 1781254987897,
       "tag": "0015_plain_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1781277433630,
+      "tag": "0016_supreme_eternity",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1781333614616,
+      "tag": "0017_lying_smasher",
+      "breakpoints": true
     }
   ]
 }

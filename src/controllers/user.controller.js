@@ -2,6 +2,7 @@ import * as userService from "../services/user.service.js";
 import * as authService from "../services/auth.service.js";
 import { ApiResponse } from "../utils/response.js";
 import { sseManager } from "../utils/sseManager.js";
+import { BadRequestError } from "../utils/errors.js";
 
 export const getProfile = async (req, res, next) => {
   try {
@@ -44,7 +45,13 @@ export const loginCustomer = async (req, res, next) => {
 
 export const refreshCustomerToken = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    let refreshToken;
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+      refreshToken = req.headers.authorization.split(" ")[1];
+    }
+    if (!refreshToken) {
+      throw new BadRequestError("Refresh token is required in Authorization header");
+    }
     const authData = await authService.refreshCustomerToken({ refreshToken });
     return ApiResponse.success(res, authData, 200, "Customer token refreshed successfully");
   } catch (error) {

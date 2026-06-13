@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, primaryKey, uniqueIndex, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, primaryKey, uniqueIndex, integer, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // =========================================================================
@@ -107,7 +107,9 @@ export const menuItems = pgTable("menu_items", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => ({
+  categoryIdIdx: index("menu_items_category_id_idx").on(table.categoryId),
+}));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   menuItems: many(menuItems),
@@ -246,7 +248,11 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => ({
+  userIdIdx: index("orders_user_id_idx").on(table.userId),
+  statusIdx: index("orders_status_idx").on(table.status),
+  createdAtIdx: index("orders_created_at_idx").on(table.createdAt),
+}));
 
 export const orderItems = pgTable("order_items", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -262,7 +268,9 @@ export const orderItems = pgTable("order_items", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => ({
+  orderIdIdx: index("order_items_order_id_idx").on(table.orderId),
+}));
 
 export const loyaltyLedger = pgTable("loyalty_ledger", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -273,7 +281,9 @@ export const loyaltyLedger = pgTable("loyalty_ledger", {
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => ({
+  userIdIdx: index("loyalty_ledger_user_id_idx").on(table.userId),
+}));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   user: one(users, {
@@ -341,5 +351,18 @@ export const feedbacksRelations = relations(feedbacks, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const otps = pgTable("otps", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  identifier: varchar("identifier", { length: 255 }).notNull(), // phone number, email address, etc.
+  code: varchar("code", { length: 6 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  mode: varchar("mode", { length: 50 }).notNull(), // 'register', 'login', 'change_phone', etc.
+  metadata: text("metadata"), // JSON string for name or other custom fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  identifierIdx: index("otps_identifier_idx").on(table.identifier),
+}));
+
 
 

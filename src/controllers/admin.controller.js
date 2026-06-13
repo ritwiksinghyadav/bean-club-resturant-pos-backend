@@ -1,6 +1,7 @@
 import * as adminService from "../services/admin.service.js";
 import { ApiResponse } from "../utils/response.js";
 import { sseManager } from "../utils/sseManager.js";
+import { BadRequestError } from "../utils/errors.js";
 
 export const login = async (req, res, next) => {
   try {
@@ -14,7 +15,13 @@ export const login = async (req, res, next) => {
 
 export const refresh = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    let refreshToken;
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+      refreshToken = req.headers.authorization.split(" ")[1];
+    }
+    if (!refreshToken) {
+      throw new BadRequestError("Refresh token is required in Authorization header");
+    }
     const data = await adminService.refreshAdminToken({ refreshToken });
     return ApiResponse.success(res, data, 200, "Admin token refreshed successfully");
   } catch (error) {

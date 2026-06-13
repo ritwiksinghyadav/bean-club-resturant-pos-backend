@@ -11,7 +11,7 @@ const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: env.NODE_ENV === "production" ? 20 : 5,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
   ssl: !isLocal ? { rejectUnauthorized: false } : undefined,
 });
 

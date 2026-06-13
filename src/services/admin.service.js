@@ -5,7 +5,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { BadRequestError, UnauthorizedError, NotFoundError } from "../utils/errors.js";
-import { jobQueue } from "../utils/jobQueue.js";
+import { sseManager } from "../utils/sseManager.js";
+import { whatsappQueue } from "../queues/whatsapp.queue.js";
 import { logger } from "../utils/logger.js";
 import { loginOrRegisterCustomer } from "./auth.service.js";
 import { placeCustomerOrder } from "./user.service.js";
@@ -1328,24 +1329,23 @@ export const updateOrderStatus = async (id, { status }) => {
     }
   }
 
-  // Enqueue status change notification job for SSE streaming to client
+  // Send status change notification directly via SSE
   try {
-    await jobQueue.publish("order.status_changed", {
+    sseManager.sendToUser(finalOrder.userId, "order_status_changed", {
       orderId: finalOrder.id,
-      userId: finalOrder.userId,
       status: finalOrder.status,
       tokenNumber: finalOrder.tokenNumber,
     });
   } catch (error) {
-    logger.error("Failed to enqueue order.status_changed job:", error);
+    logger.error("Failed to send order_status_changed SSE message directly:", error);
   }
 
-  // Enqueue WhatsApp notification if order is completed
+  // Enqueue WhatsApp notification via BullMQ if order is completed
   if (status === "completed") {
     try {
       const customerPhone = finalOrder.user?.phoneNumber;
       if (customerPhone) {
-        await jobQueue.publish("whatsapp.order_completed", {
+        await whatsappQueue.add("order_completed", {
           phone: customerPhone,
           tokenNumber: finalOrder.tokenNumber,
           orderId: finalOrder.id,
@@ -1355,7 +1355,7 @@ export const updateOrderStatus = async (id, { status }) => {
         logger.warn(`Could not enqueue WhatsApp message for completed order ${finalOrder.id} - customer has no phone number`);
       }
     } catch (error) {
-      logger.error("Failed to enqueue whatsapp.order_completed job:", error);
+      logger.error("Failed to enqueue whatsapp order_completed job to BullMQ:", error);
     }
   }
 

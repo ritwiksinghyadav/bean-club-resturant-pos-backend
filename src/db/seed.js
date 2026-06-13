@@ -34,7 +34,7 @@ const seed = async () => {
     }
 
     // 3. Create default superadmin
-    const defaultEmail = "superadmin@beanclub.com";
+    const defaultEmail = "superadmin@yopmail.com";
     const existingSuperadmin = await db.query.admins.findFirst({
       where: eq(admins.email, defaultEmail),
     });
@@ -42,7 +42,7 @@ const seed = async () => {
     if (!existingSuperadmin) {
       logger.info(`Creating default superadmin account: ${defaultEmail}`);
       const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash("superadmin123", salt);
+      const passwordHash = await bcrypt.hash("Test@1234", salt);
 
       await db.insert(admins).values({
         name: "Default Super Admin",

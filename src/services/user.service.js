@@ -2,7 +2,7 @@ import { db } from "../db/index.js";
 import { users, profiles, categories, menuItems, itemVariants, orders, orderItems, loyaltyLedger, offers } from "../db/schema.js";
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
-import { jobQueue } from "../utils/jobQueue.js";
+import { sseManager } from "../utils/sseManager.js";
 import { logger } from "../utils/logger.js";
 
 export const getUserById = async (id) => {
@@ -266,11 +266,11 @@ export const placeCustomerOrder = async (userId, items, pointsRedeemed = 0, offe
     };
   });
 
-  // Enqueue new order notification job safely outside of transaction
+  // Broadcast new order to admins directly via SSE
   try {
-    await jobQueue.publish("order.new", result.order);
+    sseManager.broadcastToAdmins("new_order", result.order);
   } catch (error) {
-    logger.error("Failed to enqueue order.new job after order placement:", error);
+    logger.error("Failed to broadcast new_order SSE message after order placement:", error);
   }
 
   return result;

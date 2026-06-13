@@ -17,11 +17,7 @@ export const loginSchema = {
   }),
 };
 
-export const refreshSchema = {
-  body: z.object({
-    refreshToken: z.string().min(1, "Refresh token is required"),
-  }),
-};
+export const refreshSchema = {};
 
 export const sendCustomerOtpSchema = {
   body: z.object({

@@ -4,6 +4,11 @@ import { z } from "zod";
 // Load environment variables from .env file
 dotenv.config();
 
+// Fallback JWT_SECRET to JWT_ACCESS_SECRET if present
+if (process.env.JWT_SECRET && !process.env.JWT_ACCESS_SECRET) {
+  process.env.JWT_ACCESS_SECRET = process.env.JWT_SECRET;
+}
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -12,6 +17,9 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(8, "JWT_REFRESH_SECRET must be at least 8 characters"),
   JWT_ACCESS_EXPIRATION: z.string().default("15m"),
   JWT_REFRESH_EXPIRATION: z.string().default("60d"),
+  REDIS_URL: z.string().default("redis://localhost:6379"),
+  WHATSAPP_API_KEY: z.string().optional(),
+  WHATSAPP_API_URL: z.string().optional(),
 });
 
 const parseEnv = () => {

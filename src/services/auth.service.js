@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { BadRequestError, UnauthorizedError } from "../utils/errors.js";
+import { generateOrGetOtp, verifyOtp } from "./otp.service.js";
 
 const generateTokens = (user) => {
   const payload = { id: user.id, email: user.email, role: user.role };
@@ -206,8 +207,6 @@ export const refreshCustomerToken = async ({ refreshToken }) => {
 // CUSTOMER OTP SYSTEM (Future WhatsApp Integration Ready)
 // =========================================================================
 
-const otpCache = new Map();
-
 /**
  * Isolated dispatcher helper for OTP messages.
  * This can be updated to call Twilio or other WhatsApp API channels.
@@ -248,16 +247,12 @@ export const sendCustomerOtp = async ({ phoneNumber, name, mode }) => {
     throw new BadRequestError("Invalid authentication mode");
   }
 
-  // Generate a mock 6-digit OTP
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // Valid for 5 minutes
-
-  // Store in cache
-  otpCache.set(phoneNumber, {
-    code,
-    expiresAt,
-    name,
+  // Generate or retrieve unexpired database-backed OTP
+  const { code } = await generateOrGetOtp({
+    identifier: phoneNumber,
     mode,
+    expiresAfterMinutes: 10,
+    metadata: { name }
   });
 
   await sendOtpMessage(phoneNumber, code);
@@ -273,29 +268,15 @@ export const verifyCustomerOtp = async ({ phoneNumber, name, code, mode }) => {
     throw new BadRequestError("Phone number, OTP code, and mode are required");
   }
 
-  const cached = otpCache.get(phoneNumber);
-  if (!cached) {
-    throw new BadRequestError("No OTP requested for this phone number");
-  }
-
-  if (cached.expiresAt < Date.now()) {
-    otpCache.delete(phoneNumber);
-    throw new BadRequestError("OTP has expired. Please request a new one.");
-  }
-
-  if (cached.code !== code) {
-    throw new BadRequestError("Invalid OTP code");
-  }
-
-  if (cached.mode !== mode) {
-    throw new BadRequestError("Invalid authentication mode");
-  }
-
-  // Clear OTP from cache
-  otpCache.delete(phoneNumber);
+  // Verify using common database OTP logic
+  const metadata = await verifyOtp({
+    identifier: phoneNumber,
+    code,
+    mode
+  });
 
   // Authenticate (Register or Login)
-  const authName = mode === "register" ? (cached.name || name) : undefined;
+  const authName = mode === "register" ? (metadata.name || name) : undefined;
   const result = await loginOrRegisterCustomer({ name: authName, phoneNumber });
   return result;
 };
@@ -314,16 +295,12 @@ export const sendChangePhoneOtp = async (userId, { newPhoneNumber }) => {
     throw new BadRequestError("This phone number is already registered to another account");
   }
 
-  // Generate a mock 6-digit OTP
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
-
-  // Store in cache
-  const cacheKey = `change_phone_${userId}`;
-  otpCache.set(cacheKey, {
-    code,
-    expiresAt,
-    newPhoneNumber,
+  // Generate or retrieve unexpired database-backed OTP
+  const { code } = await generateOrGetOtp({
+    identifier: userId,
+    mode: "change_phone",
+    expiresAfterMinutes: 10,
+    metadata: { newPhoneNumber }
   });
 
   await sendOtpMessage(newPhoneNumber, code);
@@ -339,24 +316,14 @@ export const verifyChangePhoneOtp = async (userId, { code }) => {
     throw new BadRequestError("Verification code is required");
   }
 
-  const cacheKey = `change_phone_${userId}`;
-  const cached = otpCache.get(cacheKey);
+  // Verify using common database OTP logic
+  const metadata = await verifyOtp({
+    identifier: userId,
+    code,
+    mode: "change_phone"
+  });
 
-  if (!cached) {
-    throw new BadRequestError("No phone change request found");
-  }
-
-  if (cached.expiresAt < Date.now()) {
-    otpCache.delete(cacheKey);
-    throw new BadRequestError("OTP has expired. Please request a new one.");
-  }
-
-  if (cached.code !== code) {
-    throw new BadRequestError("Invalid OTP code");
-  }
-
-  const newPhoneNumber = cached.newPhoneNumber;
-  otpCache.delete(cacheKey);
+  const newPhoneNumber = metadata.newPhoneNumber;
 
   // Update phone number in database
   const [updatedUser] = await db

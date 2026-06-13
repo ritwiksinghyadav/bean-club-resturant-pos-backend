@@ -12,11 +12,9 @@ export const protect = async (req, res, next) => {
   try {
     let token;
     
-    // Check Authorization header or query parameter (fallback for SSE EventSource)
+    // Check Authorization header strictly
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
       token = req.headers.authorization.split(" ")[1];
-    } else if (req.query.token) {
-      token = req.query.token;
     }
 
     if (!token) {
@@ -54,11 +52,9 @@ export const protectAdmin = async (req, res, next) => {
   try {
     let token;
     
-    // Check Authorization header or query parameter (fallback for SSE EventSource)
+    // Check Authorization header strictly
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
       token = req.headers.authorization.split(" ")[1];
-    } else if (req.query.token) {
-      token = req.query.token;
     }
 
     if (!token) {
